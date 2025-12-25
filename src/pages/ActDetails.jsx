@@ -1,0 +1,2392 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
+import Navbar from "../components/landing/Navbar";
+import apiService from "../services/api";
+import BookmarkButton from "../components/BookmarkButton";
+import { useAuth } from "../contexts/AuthContext";
+import jsPDF from "jspdf";
+import { FileText, StickyNote, Share2, Download } from "lucide-react";
+import { useSmoothNavigate } from "../utils/smoothNavigate";
+import { marked } from "marked";
+import html2canvas from "html2canvas";
+
+export default function ActDetails() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { id } = useParams();
+  const { isAuthenticated } = useAuth();
+  const { smoothGoBack } = useSmoothNavigate(navigate);
+  
+  // Additional check to ensure token exists - memoized to update when token changes
+  const isUserAuthenticated = useMemo(() => {
+    const token = localStorage.getItem('access_token') || 
+                  localStorage.getItem('accessToken') || 
+                  localStorage.getItem('token');
+    const hasValidToken = !!token && token !== 'null' && token !== 'undefined';
+    return isAuthenticated && hasValidToken;
+  }, [isAuthenticated]);
+  
+  const [act, setAct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showNotesPopup, setShowNotesPopup] = useState(false);
+  const [notesContent, setNotesContent] = useState("");
+  const [notesFolders, setNotesFolders] = useState([{ id: 'default', name: 'Default', content: '' }]);
+  const [activeFolderId, setActiveFolderId] = useState('default');
+  const [notesCount, setNotesCount] = useState(0);
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [popupPosition, setPopupPosition] = useState({ x: 100, y: 100 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [popupSize, setPopupSize] = useState({ width: 500, height: 400 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [isMobile, setIsMobile] = useState(false);
+  const [saveMessage, setSaveMessage] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Download dropdown state
+  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
+
+  // Markdown and translation state
+  const [showMarkdown, setShowMarkdown] = useState(false);
+  const [markdownContent, setMarkdownContent] = useState("");
+  const [translatedMarkdown, setTranslatedMarkdown] = useState("");
+  const [loadingMarkdown, setLoadingMarkdown] = useState(false);
+  const [loadingTranslation, setLoadingTranslation] = useState(false);
+  const [markdownError, setMarkdownError] = useState("");
+  const [lastLanguage, setLastLanguage] = useState('en'); // Track last language for state acts
+  const [markdownFetched, setMarkdownFetched] = useState(false); // Track if markdown has been fetched
+  const previousLangRef = useRef(null); // Track previous language to detect changes
+
+  // Language functions (similar to ViewPDF.jsx) with improved cookie detection
+  const getCurrentLanguage = () => {
+    if (typeof window === 'undefined') return 'en';
+    
+    // Check googtrans cookie first (used by Google Translate)
+    const googtransCookie = document.cookie
+      .split('; ')
+      .find(row => row.trim().startsWith('googtrans='));
+    
+    if (googtransCookie) {
+      try {
+        // Handle URL-encoded values and multiple = signs
+        const value = decodeURIComponent(googtransCookie.split('=').slice(1).join('='));
+        // Extract language code from /en/xx format
+        if (value && value.startsWith('/en/')) {
+          const lang = value.replace('/en/', '').toLowerCase().split(';')[0].trim();
+          if (lang) return lang;
+        }
+      } catch (e) {
+        console.warn('Error parsing googtrans cookie:', e);
+      }
+    }
+    
+    // Fallback to selectedLanguage cookie
+    const selectedLangCookie = document.cookie
+      .split('; ')
+      .find(row => row.trim().startsWith('selectedLanguage='));
+    
+    if (selectedLangCookie) {
+      try {
+        const value = decodeURIComponent(selectedLangCookie.split('=').slice(1).join('='));
+        if (value) return value.split(';')[0].trim().toLowerCase();
+      } catch (e) {
+        console.warn('Error parsing selectedLanguage cookie:', e);
+      }
+    }
+    
+    // Final fallback to localStorage
+    try {
+      const storedLang = localStorage.getItem('selectedLanguage');
+      if (storedLang) return storedLang.toLowerCase();
+    } catch (e) {
+      console.warn('localStorage not available:', e);
+    }
+    
+    return 'en';
+  };
+
+  const getLanguageName = (langCode) => {
+    const langNames = {
+      'en': 'English',
+      'hi': 'Hindi',
+      'gu': 'Gujarati',
+      'mr': 'Marathi',
+      'ta': 'Tamil',
+      'te': 'Telugu',
+      'kn': 'Kannada',
+      'ml': 'Malayalam',
+      'bn': 'Bengali',
+      'pa': 'Punjabi',
+      'ur': 'Urdu',
+      'or': 'Odia',
+      'as': 'Assamese'
+    };
+    return langNames[langCode] || langCode.toUpperCase();
+  };
+
+  // Translation function
+  // Translate text using MyMemory API with smart routing
+  // Smart Translation Logic:
+  // - If source is English → translate directly to target
+  // - If source is not English and target is not English → translate to English first, then to target
+  const translateText = async (text, targetLang, sourceLang = 'en') => {
+    if (!text || !text.trim() || targetLang === 'en') {
+      return text;
+    }
+
+    try {
+      const maxLength = 500;
+      const chunks = [];
+      for (let i = 0; i < text.length; i += maxLength) {
+        chunks.push(text.slice(i, i + maxLength));
+      }
+
+      // Helper function to translate a chunk using MyMemory API
+      const translateChunk = async (chunk, fromLang, toLang) => {
+        try {
+          const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${fromLang}|${toLang}`;
+          const chunkResponse = await fetch(url);
+          const chunkData = await chunkResponse.json();
+          
+          if (chunkData.responseData && chunkData.responseData.translatedText) {
+            return chunkData.responseData.translatedText;
+          }
+          return chunk;
+        } catch (error) {
+          console.warn(`Translation chunk failed (${fromLang} → ${toLang}):`, error);
+          return chunk; // Return original chunk on error
+        }
+      };
+
+      // Smart translation routing
+      const needsTwoStepTranslation = sourceLang !== 'en' && targetLang !== 'en';
+      
+      if (needsTwoStepTranslation) {
+        // Two-step translation: source → English → target
+        console.log(`🌐 Two-step translation: ${sourceLang} → English → ${targetLang}`);
+        
+        // Step 1: Translate from source language to English
+        console.log(`   Step 1: Translating ${chunks.length} chunks from ${sourceLang} to English...`);
+        const englishChunks = await Promise.all(
+          chunks.map((chunk, index) => {
+            console.log(`   Chunk ${index + 1}/${chunks.length}: ${sourceLang} → English`);
+            return translateChunk(chunk, sourceLang, 'en');
+          })
+        );
+        const englishText = englishChunks.join(" ");
+        console.log(`   ✅ Step 1 complete: Translated to English`);
+
+        // Step 2: Translate from English to target language
+        console.log(`   Step 2: Translating from English to ${targetLang}...`);
+        const englishChunksForStep2 = [];
+        for (let i = 0; i < englishText.length; i += maxLength) {
+          englishChunksForStep2.push(englishText.slice(i, i + maxLength));
+        }
+
+        const targetChunks = await Promise.all(
+          englishChunksForStep2.map((chunk, index) => {
+            console.log(`   Chunk ${index + 1}/${englishChunksForStep2.length}: English → ${targetLang}`);
+            return translateChunk(chunk, 'en', targetLang);
+          })
+        );
+        return targetChunks.join(" ");
+      } else {
+        // Direct translation: English → target (or source → target if source is not English)
+        const fromLang = sourceLang === 'en' ? 'en' : sourceLang;
+        console.log(`🌐 Direct translation: ${fromLang} → ${targetLang}`);
+        const translatedChunks = await Promise.all(
+          chunks.map((chunk, index) => {
+            console.log(`   Chunk ${index + 1}/${chunks.length}: ${fromLang} → ${targetLang}`);
+            return translateChunk(chunk, fromLang, targetLang);
+          })
+        );
+        return translatedChunks.join(" ");
+      }
+    } catch (error) {
+      console.error('Translation failed:', error);
+      return text; // Fallback to original text
+    }
+  };
+
+  // Default to Translated (Markdown) view if user is not logged in
+  useEffect(() => {
+    if (!isUserAuthenticated) {
+      setShowMarkdown(true);
+    }
+  }, [isUserAuthenticated]);
+
+  // Detect mobile view
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024); // lg breakpoint
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Track previous language to detect changes
+  useEffect(() => {
+    if (showMarkdown && markdownContent) {
+      const currentLang = getCurrentLanguage();
+      previousLangRef.current = currentLang;
+    }
+  }, [showMarkdown, markdownContent]);
+
+  // Re-translate when language cookie changes (optimized to prevent flickering)
+  useEffect(() => {
+    if (showMarkdown && markdownContent && markdownFetched) {
+      const currentLang = getCurrentLanguage();
+      const previousLang = previousLangRef.current;
+      
+      // Only translate if language actually changed
+      if (currentLang === previousLang && translatedMarkdown) {
+        return; // Skip if language hasn't changed
+      }
+      
+      // Check if this is a state act (original markdown is in Kannada)
+      const isStateAct = act?.isStateAct !== undefined 
+        ? act.isStateAct 
+        : act?.actType === 'state_act' 
+        ? true 
+        : act?.location || act?.state || 
+         (act?.source && act.source.toLowerCase().includes('state'));
+      
+      if (currentLang !== 'en' && !loadingTranslation && currentLang !== previousLang) {
+        // Translate to non-English language
+        setLoadingTranslation(true);
+        // For state acts: translate from Kannada (original) to target
+        // For central acts: translate from English (original) to target
+        const sourceLang = isStateAct ? 'kn' : 'en';
+        translateText(markdownContent, currentLang, sourceLang)
+          .then(translated => {
+            setTranslatedMarkdown(translated);
+            setLastLanguage(currentLang);
+            previousLangRef.current = currentLang;
+          })
+          .catch(err => {
+            console.error("Translation failed:", err);
+            setTranslatedMarkdown(markdownContent);
+            setLastLanguage(isStateAct ? 'kn' : 'en');
+            previousLangRef.current = currentLang;
+          })
+          .finally(() => setLoadingTranslation(false));
+      } else if (currentLang === 'en' && currentLang !== previousLang) {
+        // Switching to English
+        if (isStateAct && lastLanguage !== 'en' && translatedMarkdown) {
+          // For state acts: translate from current language back to English (don't use original)
+          console.log(`🔄 State act: Translating from ${lastLanguage} to English`);
+          setLoadingTranslation(true);
+          translateText(translatedMarkdown, 'en', lastLanguage)
+            .then(translated => {
+              setTranslatedMarkdown(translated);
+              setLastLanguage('en');
+              previousLangRef.current = currentLang;
+            })
+            .catch(err => {
+              console.error("Translation to English failed:", err);
+              // Fallback: translate from original Kannada
+              translateText(markdownContent, 'en', 'kn')
+                .then(translated => {
+                  setTranslatedMarkdown(translated);
+                  setLastLanguage('en');
+                  previousLangRef.current = currentLang;
+                })
+                .catch(() => {
+                  setTranslatedMarkdown(markdownContent);
+                  setLastLanguage('kn');
+                  previousLangRef.current = currentLang;
+                })
+                .finally(() => setLoadingTranslation(false));
+            })
+            .finally(() => {
+              if (!loadingTranslation) setLoadingTranslation(false);
+            });
+        } else {
+          // For central acts or first time: use original markdown
+          setTranslatedMarkdown(markdownContent);
+          setLastLanguage('en');
+          previousLangRef.current = currentLang;
+        }
+      }
+    }
+  }, [markdownContent, showMarkdown, act, lastLanguage, translatedMarkdown, loadingTranslation, markdownFetched]);
+  
+  // Monitor language changes with polling (optimized to prevent flickering)
+  useEffect(() => {
+    if (!showMarkdown || !markdownContent || !markdownFetched) return;
+    
+    let lastCheckedLang = previousLangRef.current || getCurrentLanguage();
+    
+    const checkLanguageChange = () => {
+      const currentLang = getCurrentLanguage();
+      if (currentLang !== lastCheckedLang && currentLang !== previousLangRef.current) {
+        // Language changed, trigger re-translation
+        const isStateAct = act?.isStateAct !== undefined 
+          ? act.isStateAct 
+          : act?.actType === 'state_act' 
+          ? true 
+          : act?.location || act?.state || 
+           (act?.source && act.source.toLowerCase().includes('state'));
+        
+        if (currentLang === 'en' && isStateAct && lastCheckedLang !== 'en' && translatedMarkdown && !loadingTranslation) {
+          // State act: translate from current language to English
+          console.log(`🔄 State act: Language changed to English, translating from ${lastCheckedLang}`);
+          setLoadingTranslation(true);
+          translateText(translatedMarkdown, 'en', lastCheckedLang)
+            .then(translated => {
+              setTranslatedMarkdown(translated);
+              setLastLanguage('en');
+              previousLangRef.current = currentLang;
+            })
+            .catch(err => {
+              console.error("Translation to English failed:", err);
+              // Fallback: translate from original Kannada
+              translateText(markdownContent, 'en', 'kn')
+                .then(translated => {
+                  setTranslatedMarkdown(translated);
+                  setLastLanguage('en');
+                  previousLangRef.current = currentLang;
+                })
+                .catch(() => {
+                  setTranslatedMarkdown(markdownContent);
+                  setLastLanguage('kn');
+                  previousLangRef.current = currentLang;
+                })
+                .finally(() => setLoadingTranslation(false));
+            })
+            .finally(() => {
+              if (loadingTranslation) setLoadingTranslation(false);
+            });
+        }
+        lastCheckedLang = currentLang;
+        previousLangRef.current = currentLang;
+      }
+    };
+    
+    const interval = setInterval(checkLanguageChange, 500);
+    return () => clearInterval(interval);
+  }, [showMarkdown, markdownContent, act, translatedMarkdown, loadingTranslation, markdownFetched]);
+
+  useEffect(() => {
+    // Fetch act data from API using ID from URL params
+    const fetchActData = async () => {
+      if (!id) {
+        setError("No act ID provided");
+        setLoading(false);
+        setTimeout(() => {
+          smoothGoBack();
+        }, 2000);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError("");
+        
+        // Try to get act data from location state first (for backward compatibility)
+        if (location.state?.act) {
+          const actData = location.state.act;
+          // Ensure act has numeric id field
+          if (actData && !actData.id && actData.act_id) {
+            actData.id = parseInt(actData.act_id);
+          }
+          if (actData && actData.id) {
+            actData.id = parseInt(actData.id);
+          }
+          console.log('📄 ActDetails: Received act data from state:', actData);
+          setAct(actData);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch from API using the ID from URL
+        const actId = parseInt(id);
+        if (isNaN(actId)) {
+          throw new Error('Invalid act ID');
+        }
+
+        console.log('📄 ActDetails: Fetching act with ID:', actId);
+        
+        // Try to determine if it's a central or state act
+        // IMPORTANT: Try state act FIRST if we're getting state act endpoints
+        // Based on backend logs, state acts use /api/state_acts/{id} for markdown
+        let actData = null;
+        let isStateAct = false;
+        
+        // First try state act (since backend logs show state act endpoints)
+        try {
+          actData = await apiService.getStateActById(actId);
+          console.log('✅ Fetched state act:', actData);
+          isStateAct = true;
+        } catch (stateError) {
+          console.log('⚠️ Not a state act, trying central act...');
+          // If state act fails, try central act
+          try {
+            actData = await apiService.getCentralActById(actId);
+            console.log('✅ Fetched central act:', actData);
+            isStateAct = false;
+          } catch (centralError) {
+            throw new Error('Act not found');
+          }
+        }
+
+        if (actData) {
+          // Ensure id is numeric
+          if (actData.id) {
+            actData.id = parseInt(actData.id);
+          } else if (actData.act_id) {
+            actData.id = parseInt(actData.act_id);
+          }
+          
+          // Explicitly set act type based on which API call succeeded
+          actData.isStateAct = isStateAct;
+          actData.actType = isStateAct ? 'state_act' : 'central_act';
+          
+          // Also set location/state if not present (for backward compatibility)
+          if (isStateAct && !actData.location && !actData.state) {
+            actData.state = actData.state || 'State Act';
+          }
+          
+          console.log('📄 Act type determined:', { isStateAct, actType: actData.actType, actId: actData.id });
+          setAct(actData);
+          setLoading(false);
+        } else {
+          throw new Error('Act data not found');
+        }
+      } catch (err) {
+        console.error('Error in ActDetails useEffect:', err);
+        setError(err.message || 'Failed to load act details');
+        setLoading(false);
+        setTimeout(() => {
+          smoothGoBack();
+        }, 2000);
+      }
+    };
+
+    fetchActData();
+  }, [id, location.state, navigate]);
+
+  // Helper function to extract only the title from note content
+  const extractTitleOnly = (content) => {
+    if (!content) return '';
+    // Extract the first line that starts with #
+    const lines = content.split('\n');
+    const titleLine = lines.find(line => line.trim().startsWith('#'));
+    if (titleLine) {
+      return titleLine.trim();
+    }
+    // If no title found, return just the first line or empty
+    return lines[0]?.trim() || '';
+  };
+
+  // Load saved notes from API when act changes
+  useEffect(() => {
+    const loadNotes = async () => {
+      if (!act || !act.id || !isUserAuthenticated) return;
+
+      try {
+        // Determine reference type
+        const referenceType = act.location || act.state || 
+                             (act.source && act.source.toLowerCase().includes('state')) 
+                             ? 'state_act' : 'central_act';
+        
+        // Fetch notes from API
+        const response = await apiService.getNotesByReference(referenceType, act.id);
+        
+        if (response.success && response.data && response.data.notes) {
+          const notes = response.data.notes;
+          if (notes.length > 0) {
+            // Convert API notes to folder format
+            const folders = notes.map((note, index) => ({
+              id: note.id || `note-${index}`,
+              name: note.title || `Note ${index + 1}`,
+              content: note.content || '',
+              noteId: note.id // Store note ID for updates
+            }));
+            
+            setNotesFolders(folders);
+            setActiveFolderId(folders[0].id);
+            setNotesContent(folders[0].content || '');
+            setNotesCount(notes.length);
+          } else {
+            // No notes found, initialize with default folder using act title
+            const defaultName = act?.short_title || act?.long_title || 'Untitled Note';
+            setNotesFolders([{ id: 'default', name: defaultName, content: '' }]);
+            setActiveFolderId('default');
+            setNotesContent('');
+            setNotesCount(0);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading notes from API:', error);
+        // Fallback to localStorage if API fails
+      const notesKey = `notes_act_${act.id}`;
+      const savedNotes = localStorage.getItem(notesKey);
+      if (savedNotes) {
+        try {
+          const parsedFolders = JSON.parse(savedNotes);
+          if (parsedFolders && Array.isArray(parsedFolders) && parsedFolders.length > 0) {
+              setNotesFolders(parsedFolders);
+              setActiveFolderId(parsedFolders[0].id);
+              setNotesContent(parsedFolders[0].content || '');
+          }
+          } catch (parseError) {
+            console.error('Error parsing saved notes:', parseError);
+        }
+      }
+    }
+    };
+
+    loadNotes();
+  }, [act?.id, isUserAuthenticated]);
+
+
+  // Fetch markdown content when markdown view is selected
+  useEffect(() => {
+    if (showMarkdown && act && !markdownContent && !loadingMarkdown) {
+      const fetchMarkdown = async () => {
+        setLoadingMarkdown(true);
+        setMarkdownError("");
+        try {
+          const actId = act.id || act.act_id;
+          if (actId) {
+            let markdown;
+            
+            // Determine if central or state act
+            const isStateAct = act.location || act.state || 
+                               (act.source && act.source.toLowerCase().includes('state'));
+            
+            if (isStateAct) {
+              markdown = await apiService.getStateActByIdMarkdown(actId);
+            } else {
+              markdown = await apiService.getCentralActByIdMarkdown(actId);
+            }
+            
+            setMarkdownContent(markdown);
+            setTranslatedMarkdown(""); // Reset translated content
+          } else {
+            setMarkdownError("No act ID available");
+          }
+        } catch (error) {
+          console.error("Error fetching markdown:", error);
+          setMarkdownError(error.message || "Failed to load Translated content");
+        } finally {
+          setLoadingMarkdown(false);
+        }
+      };
+      
+      fetchMarkdown();
+    }
+  }, [showMarkdown, act, markdownContent, loadingMarkdown]);
+
+
+  // Handle window resize to keep popup within bounds
+  useEffect(() => {
+    const handleResize = () => {
+      if (showNotesPopup) {
+        const maxX = window.innerWidth - popupSize.width;
+        const maxY = window.innerHeight - popupSize.height;
+        
+        // Adjust popup size if it exceeds viewport
+        setPopupSize(prev => ({
+          width: Math.min(prev.width, window.innerWidth * 0.9),
+          height: Math.min(prev.height, window.innerHeight * 0.9)
+        }));
+        
+        setPopupPosition(prev => ({
+          x: Math.max(0, Math.min(prev.x, maxX)),
+          y: Math.max(0, Math.min(prev.y, maxY))
+        }));
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [showNotesPopup, popupSize]);
+
+  const goBack = () => {
+    smoothGoBack();
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen" style={{ backgroundColor: '#F9FAFC' }}>
+        <Navbar />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-500">Loading act details...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen" style={{ backgroundColor: '#F9FAFC' }}>
+        <Navbar />
+        <div className="flex items-center justify-center h-96 px-4">
+          <div className="text-center max-w-md w-full">
+            <div className="mb-4">
+              <svg className="w-16 h-16 mx-auto text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+              Error Loading Act
+            </h3>
+            <p className="text-red-600 text-sm mb-4" style={{ fontFamily: 'Roboto, sans-serif' }}>
+              {error.includes('404') ? 'Act not found. The requested act may not exist or has been removed.' : error}
+            </p>
+            <button
+              onClick={goBack}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              style={{ fontFamily: 'Roboto, sans-serif' }}
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!act) {
+    return (
+      <div className="min-h-screen" style={{ backgroundColor: '#F9FAFC' }}>
+        <Navbar />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <p className="text-gray-500 text-lg">No act data available</p>
+            <button
+              onClick={goBack}
+              className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: '#F9FAFC' }}>
+      <Navbar />
+      <div className="pt-16 sm:pt-20">
+      
+      {/* Responsive Layout: Stacked on mobile, side-by-side on desktop */}
+      <div className="flex-1 p-2 sm:p-3 md:p-4 lg:p-6" style={{ minHeight: 'calc(100vh - 80px)', height: isMobile ? 'auto' : 'calc(100vh - 80px)', overflow: isMobile ? 'visible' : 'hidden' }}>
+        <div className="max-w-7xl mx-auto" style={{ height: isMobile ? 'auto' : '100%' }}>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 sm:gap-3 md:gap-4 lg:gap-6" style={{ height: isMobile ? 'auto' : '100%' }}>
+            {/* Details - Left Side - Static */}
+            <div className="lg:col-span-1 order-1 lg:order-1 pt-3" style={{ height: isMobile ? 'auto' : '100%', overflow: 'hidden' }}>
+              <div className="bg-white rounded-lg sm:rounded-xl shadow-lg border border-gray-200 p-2 sm:p-2 md:p-6 overflow-y-auto" style={{ height: isMobile ? 'auto' : '100%', position: isMobile ? 'relative' : 'sticky', top: 0 }}>
+                <div className="mb-3 sm:mb-4 md:mb-6">
+                  <div className="flex flex-col grid grid-cols-2  sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2 sm:mb-3">
+                    <h3 className="text-base sm:text-lg md:text-xl font-bold" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+                      Act Details
+                    </h3>
+                    {act && act.id && (
+                      <div className="flex items-center gap-2 justify-end self-start sm:self-auto relative">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const actId = id || act?.id || '';
+                              const shareUrl = `${window.location.origin}/acts/${actId}`;
+                              const shareTitle = act?.title || act?.name || 'Legal Act';
+                              const shareText = `Check out this legal act: ${shareTitle}`;
+                              
+                              const shareData = {
+                                title: shareTitle,
+                                text: shareText,
+                                url: shareUrl
+                              };
+
+                              if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+                                await navigator.share(shareData);
+                              } else {
+                                // Fallback to copy
+                                await navigator.clipboard.writeText(shareUrl);
+                              alert('Link copied to clipboard!');
+                              }
+                            } catch (err) {
+                              if (err.name !== 'AbortError') {
+                                // Fallback to copy
+                                const actId = id || act?.id || '';
+                                const shareUrl = `${window.location.origin}/acts/${actId}`;
+                                try {
+                                  await navigator.clipboard.writeText(shareUrl);
+                                  alert('Link copied to clipboard!');
+                                } catch (copyErr) {
+                                  console.error('Failed to share or copy:', copyErr);
+                                  alert('Failed to share. Please try again.');
+                                }
+                              }
+                            }
+                          }}
+                          className="p-1.5 sm:p-2 rounded-lg transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md"
+                          style={{ 
+                            backgroundColor: '#1E65AD',
+                            color: '#FFFFFF'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.backgroundColor = '#1a5a9a';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.backgroundColor = '#1E65AD';
+                          }}
+                          title="Share act"
+                        >
+                          <Share2 className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: '#FFFFFF' }} />
+                        </button>
+                        
+                        {/* Download Button with Dropdown */}
+                        <div className="relative">
+                          <button
+                            onClick={() => {
+                              if (!isUserAuthenticated) {
+                                navigate('/login');
+                                return;
+                              }
+                              setShowDownloadDropdown(!showDownloadDropdown);
+                            }}
+                            className="p-1.5 sm:p-2 rounded-lg transition-all duration-200 flex items-center justify-center shadow-sm hover:shadow-md"
+                            style={{ 
+                              backgroundColor: '#1E65AD',
+                              color: '#FFFFFF'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.backgroundColor = '#1a5a9a';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.backgroundColor = '#1E65AD';
+                            }}
+                            title="Download"
+                          >
+                            <Download className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: '#FFFFFF' }} />
+                          </button>
+                          
+                          {/* Download Dropdown Menu */}
+                          {showDownloadDropdown && (
+                            <>
+                              <div 
+                                className="fixed inset-0 z-40" 
+                                onClick={() => setShowDownloadDropdown(false)}
+                              ></div>
+                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                                <button
+                                  onClick={async () => {
+                                    if (!isUserAuthenticated) {
+                                      navigate('/login');
+                                      setShowDownloadDropdown(false);
+                                      return;
+                                    }
+                                    
+                                    // Check for PDF URL - try both pdf_url and pdf_link
+                                    const pdfUrl = act?.pdf_url || act?.pdf_link;
+                                    
+                                    if (!pdfUrl || pdfUrl.trim() === '') {
+                                      alert('Original PDF not available');
+                                      setShowDownloadDropdown(false);
+                                      return;
+                                    }
+                                    
+                                    try {
+                                      console.log('Downloading Original PDF from:', pdfUrl);
+                                      
+                                      // Simple fetch without credentials or custom headers to avoid CORS preflight
+                                      // DigitalOcean Spaces doesn't support credentialed requests
+                                      // This makes it a "simple request" that doesn't trigger preflight OPTIONS
+                                      try {
+                                        // Simple GET request - NO credentials, NO custom headers
+                                        const response = await fetch(pdfUrl);
+                                      
+                                      if (!response.ok) {
+                                          throw new Error(`HTTP ${response.status}`);
+                                      }
+                                      
+                                      const blob = await response.blob();
+                                      
+                                      // Verify blob is not empty
+                                      if (blob.size === 0) {
+                                        throw new Error('Downloaded PDF is empty');
+                                      }
+                                      
+                                      console.log('PDF blob size:', blob.size, 'bytes');
+                                      
+                                        // Create download link
+                                        const blobUrl = URL.createObjectURL(blob);
+                                      const link = document.createElement('a');
+                                      link.href = blobUrl;
+                                      link.download = `${act?.short_title || act?.long_title || 'act'}_original.pdf`.replace(/[^a-z0-9]/gi, '_');
+                                      link.style.display = 'none';
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      
+                                        // Clean up
+                                      setTimeout(() => {
+                                        document.body.removeChild(link);
+                                          URL.revokeObjectURL(blobUrl);
+                                      }, 100);
+                                      
+                                      console.log('PDF download initiated successfully');
+                                      } catch (fetchError) {
+                                        // If fetch fails (CORS or network), use direct download link
+                                        console.warn('Fetch failed, using direct download link:', fetchError);
+                                        const link = document.createElement('a');
+                                        link.href = pdfUrl;
+                                        link.download = `${act?.short_title || act?.long_title || 'act'}_original.pdf`.replace(/[^a-z0-9]/gi, '_');
+                                        link.style.display = 'none';
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        setTimeout(() => {
+                                        document.body.removeChild(link);
+                                        }, 100);
+                                      }
+                                    } catch (error) {
+                                      console.error('Download error:', error);
+                                      // Final fallback: open in new tab (CORS doesn't apply to top-level navigation)
+                                          window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+                                    }
+                                    setShowDownloadDropdown(false);
+                                  }}
+                                  className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm"
+                                  style={{ fontFamily: 'Roboto, sans-serif', color: '#1a1a1a' }}
+                                >
+                                  <FileText className="h-4 w-4" style={{ color: '#1E65AD' }} />
+                                  <span>Original PDF</span>
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      if (!isUserAuthenticated) {
+                                        navigate('/login');
+                                        setShowDownloadDropdown(false);
+                                        return;
+                                      }
+                                      
+                                      // Get current selected language
+                                      const currentLang = getCurrentLanguage();
+                                      const langName = getLanguageName(currentLang);
+                                      
+                                      // Get act ID
+                                      const actId = act?.id || act?.act_id;
+                                      
+                                      if (!actId) {
+                                        alert('Act ID not available');
+                                        setShowDownloadDropdown(false);
+                                        return;
+                                      }
+
+                                      // Show loading message
+                                      const loadingMsg = document.createElement('div');
+                                      loadingMsg.id = 'pdf-translation-loading';
+                                      loadingMsg.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1E65AD;color:white;padding:20px 30px;border-radius:8px;z-index:10000;font-family:Roboto,sans-serif;box-shadow:0 4px 6px rgba(0,0,0,0.3);';
+                                      loadingMsg.textContent = currentLang !== 'en' 
+                                        ? `Generating PDF in ${langName}... Please wait.`
+                                        : 'Generating PDF... Please wait.';
+                                      document.body.appendChild(loadingMsg);
+
+                                      // Fetch markdown content from backend
+                                      let markdownContent = '';
+                                      try {
+                                        // Use the act type that was determined when fetching the act
+                                        // This is more reliable than guessing based on location/state fields
+                                        const isStateAct = act.isStateAct !== undefined 
+                                          ? act.isStateAct 
+                                          : act.actType === 'state_act' 
+                                          ? true 
+                                          : act.location || act.state || 
+                                                           (act.source && act.source.toLowerCase().includes('state'));
+                                        
+                                        console.log('📄 Download PDF: Determining act type for markdown fetch', {
+                                          actId,
+                                          isStateAct,
+                                          actType: act.actType,
+                                          hasLocation: !!act.location,
+                                          hasState: !!act.state,
+                                          currentLang,
+                                          langName
+                                        });
+                                        
+                                        if (isStateAct) {
+                                          console.log('📄 Fetching state act markdown...');
+                                          markdownContent = await apiService.getStateActByIdMarkdown(actId);
+                                        } else {
+                                          console.log('📄 Fetching central act markdown...');
+                                          markdownContent = await apiService.getCentralActByIdMarkdown(actId);
+                                        }
+                                        
+                                        console.log('📄 Markdown fetched, length:', markdownContent?.length || 0);
+                                        console.log('📄 Markdown preview (first 200 chars):', markdownContent?.substring(0, 200));
+                                        
+                                        if (!markdownContent || markdownContent.trim() === '') {
+                                          throw new Error('Markdown content is empty');
+                                        }
+                                      } catch (markdownError) {
+                                        console.error('❌ Error fetching markdown:', markdownError);
+                                        console.error('❌ Error details:', {
+                                          message: markdownError.message,
+                                          stack: markdownError.stack,
+                                          actId,
+                                          isStateAct: act?.isStateAct,
+                                          actType: act?.actType
+                                        });
+                                        if (loadingMsg && loadingMsg.parentNode) {
+                                          document.body.removeChild(loadingMsg);
+                                        }
+                                        throw new Error('Failed to fetch markdown content: ' + markdownError.message);
+                                      }
+
+                                      // Translate markdown if needed
+                                      let finalMarkdown = markdownContent;
+                                      if (currentLang !== 'en') {
+                                        try {
+                                          console.log('🌐 Translating markdown to', langName, '(language code:', currentLang, ')');
+                                          const cleanMarkdown = markdownContent
+                                            .replace(/#{1,6}\s+/g, '')
+                                            .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
+                                            .replace(/\*\*(.*?)\*\*/g, '$1')
+                                            .replace(/\*(.*?)\*/g, '$1')
+                                            .replace(/`(.*?)`/g, '$1')
+                                            .replace(/```[\s\S]*?```/g, '')
+                                            .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+                                            .trim();
+                                          
+                                          console.log('🌐 Clean markdown length:', cleanMarkdown.length);
+                                          console.log('🌐 Starting translation...');
+                                          finalMarkdown = await translateText(cleanMarkdown, currentLang);
+                                          console.log('✅ Translation complete, length:', finalMarkdown?.length || 0);
+                                          console.log('✅ Translated preview (first 200 chars):', finalMarkdown?.substring(0, 200));
+                                        } catch (translateError) {
+                                          console.error('⚠️ Translation failed, using original markdown:', translateError);
+                                          console.error('⚠️ Translation error details:', {
+                                            message: translateError.message,
+                                            stack: translateError.stack,
+                                            currentLang,
+                                            langName
+                                          });
+                                          finalMarkdown = markdownContent;
+                                        }
+                                      } else {
+                                        console.log('ℹ️ Language is English, skipping translation');
+                                      }
+
+                                      // PDF GENERATION STRATEGY (same as ViewPDF.jsx):
+                                      // - For English: Use text-based rendering (smallest file size)
+                                      // - For other languages: Use html2canvas (supports Unicode/Indic scripts)
+                                      
+                                      if (currentLang === 'en') {
+                                        // TEXT-BASED APPROACH FOR ENGLISH
+                                      let plainText = finalMarkdown
+                                        .replace(/#{1,6}\s+/g, '')
+                                        .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
+                                        .replace(/\*\*(.*?)\*\*/g, '$1')
+                                        .replace(/\*(.*?)\*/g, '$1')
+                                        .replace(/`(.*?)`/g, '$1')
+                                        .replace(/```[\s\S]*?```/g, '')
+                                        .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+                                        .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '')
+                                        .replace(/\n{3,}/g, '\n\n')
+                                        .trim();
+
+                                      const pdf = new jsPDF('p', 'mm', 'a4');
+                                      const pageWidth = pdf.internal.pageSize.getWidth();
+                                      const pageHeight = pdf.internal.pageSize.getHeight();
+                                      const margin = 10;
+                                      const lineHeight = 5;
+                                      const fontSize = 9;
+                                      
+                                      pdf.setFontSize(fontSize);
+                                      pdf.setFont('helvetica', 'normal');
+                                      
+                                      const maxWidth = pageWidth - (margin * 2);
+                                      let y = margin;
+                                      const lines = plainText.split('\n');
+                                      
+                                      lines.forEach((line) => {
+                                        if (!line.trim()) {
+                                          y += lineHeight * 0.5;
+                                          return;
+                                        }
+                                        
+                                        const words = line.split(' ');
+                                        let currentLine = '';
+                                        
+                                        words.forEach((word) => {
+                                          const testLine = currentLine ? `${currentLine} ${word}` : word;
+                                          const textWidth = pdf.getTextWidth(testLine);
+                                          
+                                          if (textWidth > maxWidth && currentLine) {
+                                            if (y > pageHeight - margin - lineHeight) {
+                                              pdf.addPage();
+                                              y = margin;
+                                            }
+                                            pdf.text(currentLine, margin, y);
+                                            y += lineHeight;
+                                            currentLine = word;
+                                          } else {
+                                            currentLine = testLine;
+                                          }
+                                        });
+                                        
+                                        if (currentLine) {
+                                          if (y > pageHeight - margin - lineHeight) {
+                                            pdf.addPage();
+                                            y = margin;
+                                          }
+                                          pdf.text(currentLine, margin, y);
+                                          y += lineHeight;
+                                        }
+                                      });
+
+                                      if (loadingMsg && loadingMsg.parentNode) {
+                                        document.body.removeChild(loadingMsg);
+                                      }
+
+                                      const baseFileName = (act?.short_title || act?.long_title || 'act').replace(/[^a-z0-9]/gi, '_');
+                                        const fileName = `${baseFileName}_translated.pdf`;
+                                      
+                                      pdf.save(fileName);
+                                        console.log('✅ PDF downloaded successfully (text-based):', fileName);
+                                      } else {
+                                        // HTML2CANVAS APPROACH FOR NON-ENGLISH LANGUAGES (supports Unicode/Indic scripts)
+                                        console.log('📄 Generating PDF for non-English language:', currentLang);
+                                        
+                                        if (!finalMarkdown || finalMarkdown.trim() === '') {
+                                          if (loadingMsg && loadingMsg.parentNode) {
+                                            document.body.removeChild(loadingMsg);
+                                          }
+                                          throw new Error('No content to generate PDF');
+                                        }
+                                        
+                                        // Determine appropriate font family for the language
+                                        const fontFamily = currentLang === 'gu' 
+                                          ? 'Noto Sans Gujarati, Arial Unicode MS, sans-serif'
+                                          : currentLang === 'hi'
+                                          ? 'Noto Sans Devanagari, Arial Unicode MS, sans-serif'
+                                          : currentLang === 'ta'
+                                          ? 'Noto Sans Tamil, Arial Unicode MS, sans-serif'
+                                          : currentLang === 'te'
+                                          ? 'Noto Sans Telugu, Arial Unicode MS, sans-serif'
+                                          : currentLang === 'kn'
+                                          ? 'Noto Sans Kannada, Arial Unicode MS, sans-serif'
+                                          : currentLang === 'ml'
+                                          ? 'Noto Sans Malayalam, Arial Unicode MS, sans-serif'
+                                          : currentLang === 'bn'
+                                          ? 'Noto Sans Bengali, Arial Unicode MS, sans-serif'
+                                          : currentLang === 'mr'
+                                          ? 'Noto Sans Devanagari, Arial Unicode MS, sans-serif'
+                                          : 'Noto Sans Devanagari, Noto Sans Gujarati, Arial Unicode MS, sans-serif';
+                                        
+                                        // Parse markdown to HTML
+                                        let htmlContent;
+                                        try {
+                                          const parseResult = marked.parse(finalMarkdown);
+                                          if (parseResult instanceof Promise) {
+                                            htmlContent = await parseResult;
+                                          } else {
+                                            htmlContent = parseResult;
+                                          }
+                                          if (!htmlContent || htmlContent.trim().length < 10) {
+                                            htmlContent = `<div style="white-space: pre-wrap; font-family: ${fontFamily};">${finalMarkdown.replace(/\n/g, '<br>')}</div>`;
+                                          }
+                                        } catch (parseError) {
+                                          console.warn('Markdown parsing failed, using plain text:', parseError);
+                                          htmlContent = `<div style="white-space: pre-wrap; font-family: ${fontFamily}; line-height: 1.6;">${finalMarkdown.replace(/\n/g, '<br>')}</div>`;
+                                        }
+
+                                        // Create temporary div for rendering
+                                        const tempDiv = document.createElement('div');
+                                        tempDiv.style.position = 'absolute';
+                                        tempDiv.style.left = '-9999px';
+                                        tempDiv.style.top = '0';
+                                        tempDiv.style.width = '210mm';
+                                        tempDiv.style.padding = '15mm';
+                                        tempDiv.style.fontSize = '12pt';
+                                        tempDiv.style.lineHeight = '1.7';
+                                        tempDiv.style.fontFamily = fontFamily;
+                                        tempDiv.style.color = '#1a1a1a';
+                                        tempDiv.style.backgroundColor = '#ffffff';
+                                        tempDiv.style.direction = 'ltr';
+                                        tempDiv.style.unicodeBidi = 'embed';
+                                        tempDiv.style.wordWrap = 'break-word';
+                                        tempDiv.style.overflowWrap = 'break-word';
+                                        tempDiv.style.textAlign = 'left';
+                                        
+                                        // Clean HTML to remove problematic elements
+                                        let cleanHtmlContent = htmlContent
+                                          .replace(/<img[^>]*>/gi, '')
+                                          .replace(/<img[^>]*\/>/gi, '')
+                                          .replace(/<svg[\s\S]*?<\/svg>/gi, '')
+                                          .replace(/<canvas[\s\S]*?<\/canvas>/gi, '')
+                                          .replace(/data:image[^;]*;base64,[^"'\s)]*/gi, '')
+                                          .replace(/background-image:\s*url\(data:[^)]*\)/gi, '');
+                                        
+                                        tempDiv.innerHTML = cleanHtmlContent;
+                                        document.body.appendChild(tempDiv);
+
+                                        // Wait for fonts to load
+                                        await Promise.all([
+                                          new Promise(resolve => setTimeout(resolve, 800)),
+                                          document.fonts?.ready || Promise.resolve()
+                                        ]);
+                                        
+                                        void tempDiv.offsetHeight; // Force layout calculation
+                                        
+                                        if (!tempDiv.textContent || tempDiv.textContent.trim().length === 0) {
+                                          if (tempDiv && tempDiv.parentNode) {
+                                            document.body.removeChild(tempDiv);
+                                          }
+                                          if (loadingMsg && loadingMsg.parentNode) {
+                                            document.body.removeChild(loadingMsg);
+                                          }
+                                          throw new Error('No content to render in PDF');
+                                        }
+                                        
+                                        tempDiv.style.visibility = 'visible';
+                                        tempDiv.style.opacity = '1';
+
+                                        // Generate PDF using html2canvas
+                                        const pdf = new jsPDF('p', 'mm', 'a4');
+                                        const pageWidth = pdf.internal.pageSize.getWidth();
+                                        const pageHeight = pdf.internal.pageSize.getHeight();
+                                        const margin = 15;
+                                        const contentWidth = pageWidth - (margin * 2);
+
+                                        try {
+                                          console.log('📸 Starting html2canvas rendering...');
+                                          const canvas = await html2canvas(tempDiv, {
+                                            scale: 1.0,
+                                            useCORS: false,
+                                            logging: false,
+                                            backgroundColor: '#ffffff',
+                                            removeContainer: false,
+                                            allowTaint: false,
+                                            pixelRatio: window.devicePixelRatio || 1,
+                                            letterRendering: true,
+                                            foreignObjectRendering: false,
+                                            onclone: (clonedDoc) => {
+                                              // Clean up any data URIs in the cloned document
+                                              try {
+                                                const allElements = clonedDoc.querySelectorAll('*');
+                                                allElements.forEach(el => {
+                                                  try {
+                                                    // Check style attribute
+                                                    if (el.style && el.style.backgroundImage) {
+                                                      if (el.style.backgroundImage.includes('data:')) {
+                                                        el.style.backgroundImage = 'none';
+                                                      }
+                                                    }
+                                                    // Check all attributes
+                                                    Array.from(el.attributes || []).forEach(attr => {
+                                                      if (attr.value && attr.value.includes('data:image')) {
+                                                        el.removeAttribute(attr.name);
+                                                      }
+                                                    });
+                                                  } catch (e) {
+                                                    // Ignore errors
+                                                  }
+                                                });
+                                              } catch (e) {
+                                                console.warn('Error in onclone callback:', e);
+                                              }
+                                            }
+                                          });
+                                          console.log('✅ html2canvas rendering complete, canvas size:', canvas.width, 'x', canvas.height);
+
+                                          console.log('🖼️ Converting canvas to image data...');
+                                          const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                                          console.log('✅ Image data generated, length:', imgData.length);
+                                          
+                                          const imgWidth = contentWidth;
+                                          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                                          
+                                          console.log('📄 Adding image to PDF, dimensions:', imgWidth, 'x', imgHeight);
+                                          
+                                          let heightLeft = imgHeight;
+                                          let position = margin;
+
+                                          pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+                                          heightLeft -= pageHeight - (margin * 2);
+
+                                          let pageCount = 1;
+                                          while (heightLeft > 0) {
+                                            position = heightLeft - imgHeight + margin;
+                                            pdf.addPage();
+                                            pageCount++;
+                                            pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+                                            heightLeft -= pageHeight - (margin * 2);
+                                          }
+                                          console.log('📄 PDF pages created:', pageCount);
+
+                                          // Cleanup
+                                          if (tempDiv && tempDiv.parentNode) {
+                                            document.body.removeChild(tempDiv);
+                                          }
+                                          if (loadingMsg && loadingMsg.parentNode) {
+                                            document.body.removeChild(loadingMsg);
+                                          }
+
+                                          const baseFileName = (act?.short_title || act?.long_title || 'act').replace(/[^a-z0-9]/gi, '_');
+                                          const fileName = `${baseFileName}_${langName}.pdf`;
+                                          pdf.save(fileName);
+                                          console.log('✅ PDF downloaded successfully (html2canvas, Unicode support):', fileName);
+                                        } catch (htmlError) {
+                                          console.error('❌ Error in html2canvas:', htmlError);
+                                          console.error('❌ Error stack:', htmlError.stack);
+                                          console.error('❌ Error details:', {
+                                            message: htmlError.message,
+                                            name: htmlError.name,
+                                            tempDivExists: !!tempDiv,
+                                            tempDivParent: tempDiv?.parentNode,
+                                            tempDivContent: tempDiv?.textContent?.substring(0, 100)
+                                          });
+                                          if (tempDiv && tempDiv.parentNode) {
+                                            document.body.removeChild(tempDiv);
+                                          }
+                                          if (loadingMsg && loadingMsg.parentNode) {
+                                            document.body.removeChild(loadingMsg);
+                                          }
+                                          throw new Error(`Failed to generate PDF: ${htmlError.message || 'Unknown error'}`);
+                                        }
+                                      }
+                                      
+                                    } catch (error) {
+                                      console.error('Error generating PDF:', error);
+                                      
+                                      const loadingMsg = document.getElementById('pdf-translation-loading');
+                                      if (loadingMsg && loadingMsg.parentNode) {
+                                        document.body.removeChild(loadingMsg);
+                                      }
+                                      
+                                      alert(error.message || 'Failed to generate PDF. Please try again.');
+                                    }
+                                    setShowDownloadDropdown(false);
+                                  }}
+                                  className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm border-t border-gray-200"
+                                  style={{ fontFamily: 'Roboto, sans-serif', color: '#1a1a1a' }}
+                                >
+                                  <FileText className="h-4 w-4" style={{ color: '#CF9B63' }} />
+                                  <span>
+                                    {(() => {
+                                      const currentLang = getCurrentLanguage();
+                                      const langName = getLanguageName(currentLang);
+                                      return currentLang !== 'en' 
+                                        ? `Download PDF (${langName})`
+                                        : 'Translated PDF';
+                                    })()}
+                                  </span>
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        
+                        <BookmarkButton
+                          item={act}
+                          type={act.actType || (act.isStateAct ? "state_act" : (act.location || act.state ? "state_act" : "central_act"))}
+                          size="small"
+                          showText={false}
+                          autoCheckStatus={true}
+                          showNotifications={true}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="w-10 sm:w-12 h-0.5 sm:h-1 bg-gradient-to-r" style={{ background: 'linear-gradient(90deg, #1E65AD 0%, #CF9B63 100%)' }}></div>
+                </div>
+
+                <div className="space-y-2.5 sm:space-y-3 md:space-y-4 lg:space-y-6">
+                  {/* Title */}
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-1.5 sm:mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                      Act Title
+                    </h4>
+                    <p className="text-xs sm:text-sm text-gray-600 leading-relaxed break-words" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                      {act.short_title || act.long_title}
+                    </p>
+                  </div>
+
+                  {/* Long Title/Description */}
+                  {act.long_title && act.long_title !== act.short_title && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Description
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600 leading-relaxed" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {act.long_title}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Ministry */}
+                  {act.ministry && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Ministry
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {act.ministry}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Department */}
+                  {act.department && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Department
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {act.department}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Location for State Acts */}
+                  {act.location && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Location
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {act.location}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Year */}
+                  {act.year && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Year
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {act.year}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Enactment Date */}
+                  {act.enactment_date && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Enactment Date
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {new Date(act.enactment_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Enforcement Date */}
+                  {act.enforcement_date && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Enforcement Date
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {new Date(act.enforcement_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Act ID */}
+                  {act.act_id && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Act ID
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600 font-mono" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {act.act_id}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Source */}
+                  {act.source && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Source
+                      </h4>
+                      <p className="text-xs sm:text-sm text-gray-600 font-mono" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {act.source}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Type */}
+                  {act.type && (
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        Type
+                      </h4>
+                      <div className="inline-flex items-center gap-2 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium" 
+                           style={{ backgroundColor: '#E3F2FD', color: '#1E65AD', fontFamily: 'Roboto, sans-serif' }}>
+                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full" style={{ backgroundColor: '#1E65AD' }}></div>
+                        {act.type}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="mt-3 sm:mt-4 md:mt-6 lg:mt-8 pt-2.5 sm:pt-3 md:pt-4 lg:pt-6 border-t border-gray-200">
+                  <div className="space-y-2">
+                    <button
+                      onClick={goBack}
+                      className="w-full px-3 sm:px-4 py-2 sm:py-2.5 md:py-3 border-2 border-gray-300 text-gray-700 rounded-lg sm:rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 font-medium shadow-sm hover:shadow-md flex items-center justify-center gap-2 text-xs sm:text-sm"
+                      style={{ fontFamily: 'Roboto, sans-serif' }}
+                    >
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                      </svg>
+                      Back to Results
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* PDF Viewer - Right Side - Scrollable */}
+            <div className="lg:col-span-2 order-2 lg:order-2" style={{ height: isMobile ? 'auto' : '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              {/* PDF Viewer - Show on all screen sizes */}
+              <div className="bg-white rounded-lg sm:rounded-xl shadow-lg border border-gray-200 overflow-hidden flex flex-col" style={{ height: isMobile ? 'auto' : '100%' }}>
+                {/* PDF Toolbar - Search, Summary, Notes */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-1.5 md:gap-3 p-1.5 sm:p-2 md:p-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+                  {/* Search Bar - First Row on Mobile */}
+                  <div className="relative w-full sm:flex-1 sm:min-w-[150px] md:min-w-0">
+                    <img 
+                      src="/uit3.GIF" 
+                      alt="Search" 
+                      className="absolute left-1.5 sm:left-2.5 md:left-3 top-1/2 transform -translate-y-1/2 h-12 w-8 sm:h-8 sm:w-8 md:h-10 md:w-10 lg:h-12 lg:w-12 object-contain pointer-events-none z-10"
+                    />
+                    
+                    <input
+                      type="text"
+                      placeholder="Search With Kiki AI..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 sm:pl-12 md:pl-14 lg:pl-16 pr-1.5 sm:pr-3 py-2 sm:py-1.5 md:py-2.5 border border-gray-300 rounded-md sm:rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-[10px] sm:text-xs md:text-base"
+                      style={{ fontFamily: 'Roboto, sans-serif' }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && searchQuery.trim()) {
+                          // Redirect to chatbot with question
+                          const question = searchQuery.trim();
+                          navigate('/legal-chatbot', {
+                            state: {
+                              initialQuestion: question
+                            }
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Action Buttons Container - Second Row on Mobile */}
+                  <div className="flex items-center gap-0.5 sm:gap-1 md:gap-2.5 flex-shrink-0 w-full sm:w-auto">
+                    {/* Notes Button */}
+                    {isUserAuthenticated ? (
+                      <button
+                        type="button"
+                        className="animated-icon-button flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-white font-medium text-[10px] sm:text-xs md:text-sm transition-colors hover:opacity-90 relative"
+                        style={{ 
+                          backgroundColor: '#1E65AD',
+                          fontFamily: 'Roboto, sans-serif'
+                        }}
+                        onClick={() => {
+                          const notesKey = `notes_act_${act?.id || 'default'}`;
+                          const savedNotes = localStorage.getItem(notesKey);
+                          if (!savedNotes) {
+                            // Initialize with act title as folder name if no folders exist
+                            if (notesFolders.length === 0 || (notesFolders.length === 1 && notesFolders[0].id === 'default' && notesFolders[0].content === '')) {
+                              const defaultName = act?.short_title || act?.long_title || 'Untitled Note';
+                              setNotesFolders([{ id: 'default', name: defaultName, content: '' }]);
+                              setActiveFolderId('default');
+                              setNotesContent('');
+                            }
+                          } else {
+                            const currentFolder = notesFolders.find(f => f.id === activeFolderId);
+                            // Remove title (lines starting with #) from content
+                            const content = currentFolder?.content || '';
+                            const lines = content.split('\n');
+                            const contentWithoutTitle = lines.filter(line => !line.trim().startsWith('#')).join('\n').trim();
+                            setNotesContent(contentWithoutTitle);
+                          }
+                          setShowNotesPopup(true);
+                        }}
+                        title="Add Notes"
+                      >
+                        <svg
+                          className="icon w-3 h-3 sm:w-4 sm:h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2.5"
+                        >
+                          <path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5-.3.3-.5.7-.5 1.1v12.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h9.8c.4 0 .8-.2 1.1-.5.3-.3.5-.7.5-1.1V6.5L15.5 2z"></path>
+                          <polyline points="15 2 15 8 21 8"></polyline>
+                        </svg>
+                        <span>Notes</span>
+                        {notesCount > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center z-20 shadow-lg" style={{ fontSize: notesCount > 9 ? '10px' : '11px', lineHeight: '1' }}>
+                            {notesCount > 99 ? '99+' : notesCount}
+                          </span>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="animated-icon-button flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-white font-medium text-[10px] sm:text-xs md:text-sm transition-colors hover:opacity-90"
+                        style={{ 
+                          backgroundColor: '#1E65AD',
+                          fontFamily: 'Roboto, sans-serif'
+                        }}
+                        onClick={() => {
+                          navigate('/login');
+                        }}
+                        title="Login to Add Notes"
+                      >
+                        <svg
+                          className="icon w-3 h-3 sm:w-4 sm:h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2.5"
+                        >
+                          <path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5-.3.3-.5.7-.5 1.1v12.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h9.8c.4 0 .8-.2 1.1-.5.3-.3.5-.7.5-1.1V6.5L15.5 2z"></path>
+                          <polyline points="15 2 15 8 21 8"></polyline>
+                        </svg>
+                        <span>Notes</span>
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* PDF/Markdown Toggle Button */}
+                  <div className="relative flex items-center bg-gray-100 rounded-lg sm:rounded-xl p-0.5 sm:p-1 shadow-inner flex-shrink-0 w-full sm:w-auto sm:inline-flex">
+                    {/* Sliding background indicator */}
+                    <motion.div
+                      className="absolute top-0.5 bottom-0.5 sm:top-1 sm:bottom-1 rounded-md sm:rounded-lg z-0"
+                      initial={false}
+                      animate={{
+                        left: !showMarkdown ? '2px' : 'calc(50% + 1px)',
+                        backgroundColor: !showMarkdown ? '#1E65AD' : '#CF9B63',
+                      }}
+                      transition={{ 
+                        type: "spring", 
+                        stiffness: 300, 
+                        damping: 30 
+                      }}
+                      style={{
+                        width: 'calc(50% - 2px)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                      }}
+                    />
+                    
+                    <motion.button
+                      onClick={() => {
+                        if (!isUserAuthenticated) {
+                          navigate('/login');
+                          return;
+                        }
+                        setShowMarkdown(false);
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`flex-1 sm:flex-none px-2.5 sm:px-4 md:px-5 lg:px-6 py-1 sm:py-1.5 md:py-2 rounded-md sm:rounded-lg font-semibold transition-all duration-300 relative z-10 text-[10px] sm:text-xs md:text-base text-center ${
+                        !showMarkdown
+                          ? 'text-white'
+                          : 'text-gray-600 hover:text-gray-800'
+                      }`}
+                      style={{ 
+                        fontFamily: 'Roboto, sans-serif',
+                      }}
+                    >
+                      Original
+                    </motion.button>
+                    <motion.button
+                      onClick={() => {
+                        if (!isUserAuthenticated) {
+                          navigate('/login');
+                          return;
+                        }
+                        setShowMarkdown(true);
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`flex-1 sm:flex-none px-2.5 sm:px-4 md:px-5 lg:px-6 py-1 sm:py-1.5 md:py-2 rounded-md sm:rounded-lg font-semibold transition-all duration-300 relative z-10 text-[10px] sm:text-xs md:text-base text-center ${
+                        showMarkdown
+                          ? 'text-white'
+                          : 'text-gray-600 hover:text-gray-800'
+                      }`}
+                      style={{
+                        fontFamily: 'Roboto, sans-serif',
+                      }}
+                    >
+                      Translated
+                    </motion.button>
+                  </div>
+                </div>
+                
+                {/* PDF/Markdown Content */}
+                <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0, height: '100%' }}>
+                  {showMarkdown ? (
+                    /* Markdown View */
+                    <div 
+                      className="w-full h-full bg-white rounded-lg overflow-y-auto"
+                      style={{
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        position: 'relative'
+                      }}
+                    >
+                      {loadingMarkdown || loadingTranslation ? (
+                        <div className="flex items-center justify-center h-full">
+                          <div className="text-center">
+                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                            <p className="mt-4 text-gray-500 text-sm">
+                              {loadingMarkdown ? 'Loading content...' : 'Translating content...'}
+                            </p>
+                          </div>
+                        </div>
+                      ) : markdownError ? (
+                        <div className="flex items-center justify-center h-full p-4">
+                          <div className="text-center">
+                            <p className="text-red-500 text-sm mb-2">{markdownError}</p>
+                          <button
+                              onClick={() => {
+                                setMarkdownError("");
+                                setMarkdownContent("");
+                                if (act && act.id) {
+                                  const actId = act.id || act.act_id;
+                                  const isStateAct = act.location || act.state || 
+                                                     (act.source && act.source.toLowerCase().includes('state'));
+                                  if (isStateAct) {
+                                    apiService.getStateActByIdMarkdown(actId).then(setMarkdownContent).catch(err => setMarkdownError(err.message));
+                                  } else {
+                                    apiService.getCentralActByIdMarkdown(actId).then(setMarkdownContent).catch(err => setMarkdownError(err.message));
+                                  }
+                                }
+                              }}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                            >
+                              Retry
+                          </button>
+                        </div>
+                      </div>
+                      ) : markdownContent ? (
+                        <div 
+                          className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 markdown-scroll-container"
+                          style={{
+                            scrollbarWidth: 'thin',
+                            scrollbarColor: '#CF9B63 #f4f4f4',
+                            height: '100%',
+                            overflowY: 'scroll',
+                            position: 'relative',
+                            zIndex: 1,
+                            display: 'flex',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <style>
+                            {`
+                              .markdown-scroll-container::-webkit-scrollbar {
+                                width: 12px;
+                              }
+                              .markdown-scroll-container::-webkit-scrollbar-track {
+                                background: #f4f4f4;
+                                border-radius: 6px;
+                              }
+                              .markdown-scroll-container::-webkit-scrollbar-thumb {
+                                background: #CF9B63;
+                                border-radius: 6px;
+                              }
+                              .markdown-scroll-container::-webkit-scrollbar-thumb:hover {
+                                background: #b88a56;
+                              }
+                              .markdown-content {
+                                text-rendering: optimizeLegibility;
+                                -webkit-font-smoothing: antialiased;
+                                -moz-osx-font-smoothing: grayscale;
+                                font-feature-settings: "kern" 1;
+                                text-size-adjust: 100%;
+                              }
+                            `}
+                          </style>
+                          <div 
+                            key={`markdown-${act?.id || act?.act_id || 'unknown'}-${markdownFetched}-${lastLanguage}`}
+                            className="markdown-content" 
+                            style={{ 
+                              fontFamily: 'Roboto, sans-serif',
+                              lineHeight: '1.9',
+                              color: '#1a1a1a',
+                              fontSize: '17px',
+                              maxWidth: '900px',
+                              width: '100%',
+                              padding: '2rem 3rem',
+                              margin: '0 auto',
+                              letterSpacing: '0.01em'
+                            }}
+                          >
+                            <ReactMarkdown
+                              remarkPlugins={[remarkMath]}
+                              rehypePlugins={[rehypeKatex]}
+                              components={{
+                                h1: ({node, ...props}) => <h1 style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif", marginBottom: '1rem', marginTop: '1.5rem' }} {...props} />,
+                                h2: ({node, ...props}) => <h2 style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif", marginBottom: '0.75rem', marginTop: '1.25rem' }} {...props} />,
+                                h3: ({node, ...props}) => <h3 style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif", marginBottom: '0.5rem', marginTop: '1rem' }} {...props} />,
+                                p: ({node, ...props}) => <p style={{ marginBottom: '1rem', lineHeight: '1.6', color: '#1a1a1a' }} {...props} />,
+                                strong: ({node, ...props}) => <strong style={{ color: '#1E65AD', fontWeight: 'bold' }} {...props} />,
+                                ul: ({node, ...props}) => <ul style={{ marginBottom: '1rem', paddingLeft: '1.5rem' }} {...props} />,
+                                ol: ({node, ...props}) => <ol style={{ marginBottom: '1rem', paddingLeft: '1.5rem' }} {...props} />,
+                                li: ({node, ...props}) => <li style={{ marginBottom: '0.5rem', lineHeight: '1.6' }} {...props} />,
+                                code: ({node, ...props}) => <code style={{ backgroundColor: '#f4f4f4', padding: '0.2rem 0.4rem', borderRadius: '0.25rem', fontSize: '0.9em' }} {...props} />,
+                                blockquote: ({node, ...props}) => <blockquote style={{ borderLeft: '4px solid #1E65AD', paddingLeft: '1rem', marginLeft: 0, fontStyle: 'italic', color: '#666' }} {...props} />,
+                              }}
+                            >
+                              {(() => {
+                                const currentLang = getCurrentLanguage();
+                                if (currentLang !== 'en' && translatedMarkdown) {
+                                  return translatedMarkdown;
+                                }
+                                return markdownContent;
+                              })()}
+                            </ReactMarkdown>
+                    </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <p className="text-gray-500 text-sm">No content available</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* PDF View */
+                    act.pdf_url && act.pdf_url.trim() !== "" ? (
+                      <div className="relative h-full w-full" style={{ minHeight: 'calc(100vh - 200px)' }}>
+                        {/* PDF Viewer - Embedded */}
+                        <iframe
+                          src={`${act.pdf_url}#toolbar=0&navpanes=0&scrollbar=1`}
+                          className="w-full h-full border-0"
+                          title="Act PDF Document"
+                          style={{ minHeight: '100%' }}
+                        />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-96">
+                    <div className="text-center p-4 sm:p-8">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 rounded-full bg-gradient-to-br flex items-center justify-center" 
+                           style={{ background: 'linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)' }}>
+                        <svg className="w-8 h-8 sm:w-10 sm:h-10" style={{ color: '#1E65AD' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-bold mb-2" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+                        PDF Not Available
+                      </h3>
+                      <p className="text-gray-600 text-xs sm:text-sm" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        This act does not have a PDF document available.
+                      </p>
+                    </div>
+                  </div>
+                    )
+                )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      {/* Draggable Notes Popup - Improved Mobile */}
+      <AnimatePresence>
+      {showNotesPopup && (
+        <>
+          {/* Backdrop */}
+            <motion.div 
+            className="fixed inset-0 bg-black bg-opacity-30 z-40"
+            onClick={() => setShowNotesPopup(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+          />
+          
+            {/* Popup - Centered modal on mobile, draggable on desktop */}
+            <motion.div
+              className={`fixed bg-white z-50 flex flex-col ${isMobile ? 'rounded-3xl' : 'rounded-2xl'}`}
+              style={isMobile ? {
+                width: '92%',
+                maxWidth: '500px',
+                height: '85vh',
+                maxHeight: '700px',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                fontFamily: 'Roboto, sans-serif',
+                userSelect: 'auto',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.1)',
+              } : {
+              left: `${popupPosition.x}px`,
+              top: `${popupPosition.y}px`,
+              width: `${popupSize.width}px`,
+              height: `${popupSize.height}px`,
+                minWidth: '450px',
+                minHeight: '400px',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              fontFamily: 'Roboto, sans-serif',
+                userSelect: (isDragging || isResizing) ? 'none' : 'auto',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.08)',
+              }}
+              initial={isMobile ? { opacity: 0, scale: 0.9, y: '-50%', x: '-50%' } : { opacity: 0, scale: 0.95 }}
+              animate={isMobile ? { opacity: 1, scale: 1, y: '-50%', x: '-50%' } : { opacity: 1, scale: 1 }}
+              exit={isMobile ? { opacity: 0, scale: 0.9, y: '-50%', x: '-50%' } : { opacity: 0, scale: 0.95 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onMouseDown={!isMobile ? (e) => {
+              // Only start dragging if clicking on the header
+              if (e.target.closest('.notes-popup-header')) {
+                setIsDragging(true);
+                const rect = e.currentTarget.getBoundingClientRect();
+                setDragOffset({
+                  x: e.clientX - rect.left,
+                  y: e.clientY - rect.top
+                });
+              }
+              } : undefined}
+              onMouseMove={!isMobile ? (e) => {
+              if (isDragging) {
+                const newX = e.clientX - dragOffset.x;
+                const newY = e.clientY - dragOffset.y;
+                
+                // Constrain to viewport
+                const maxX = window.innerWidth - popupSize.width;
+                const maxY = window.innerHeight - popupSize.height;
+                
+                setPopupPosition({
+                  x: Math.max(0, Math.min(newX, maxX)),
+                  y: Math.max(0, Math.min(newY, maxY))
+                });
+              } else if (isResizing) {
+                const deltaX = e.clientX - resizeStart.x;
+                const deltaY = e.clientY - resizeStart.y;
+                
+                const newWidth = Math.max(400, Math.min(window.innerWidth * 0.9, resizeStart.width + deltaX));
+                const newHeight = Math.max(300, Math.min(window.innerHeight * 0.9, resizeStart.height + deltaY));
+                
+                setPopupSize({
+                  width: newWidth,
+                  height: newHeight
+                });
+                
+                // Adjust position if popup goes out of bounds
+                const maxX = window.innerWidth - newWidth;
+                const maxY = window.innerHeight - newHeight;
+                setPopupPosition(prev => ({
+                  x: Math.min(prev.x, maxX),
+                  y: Math.min(prev.y, maxY)
+                }));
+              }
+              } : undefined}
+              onMouseUp={!isMobile ? () => {
+              setIsDragging(false);
+              setIsResizing(false);
+              } : undefined}
+              onMouseLeave={!isMobile ? () => {
+              setIsDragging(false);
+              setIsResizing(false);
+              } : undefined}
+          >
+              
+            {/* Header - Draggable Area */}
+            <div 
+                className={`notes-popup-header flex items-center justify-between ${isMobile ? 'p-4' : 'p-4 sm:p-5'} border-b flex-shrink-0 ${isMobile ? '' : 'cursor-move'}`}
+              style={{ 
+                  borderTopLeftRadius: isMobile ? '1.5rem' : '1rem', 
+                  borderTopRightRadius: isMobile ? '1.5rem' : '1rem',
+                  cursor: isMobile ? 'default' : (isDragging ? 'grabbing' : 'move'),
+                userSelect: 'none',
+                  background: 'linear-gradient(135deg, #1E65AD 0%, #2E7CD6 50%, #CF9B63 100%)',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+              }}
+                onMouseEnter={!isMobile ? (e) => {
+                if (!isDragging) {
+                  e.currentTarget.style.cursor = 'move';
+                }
+                } : undefined}
+            >
+                <div className="flex items-center gap-3">
+                  <div className="p-1.5 bg-white bg-opacity-20 rounded-lg backdrop-blur-sm">
+                    <StickyNote className={`${isMobile ? 'h-4 w-4' : 'h-5 w-5'} text-white`} />
+                  </div>
+                  <h3 className={`${isMobile ? 'text-lg' : 'text-xl'} font-bold text-white`} style={{ 
+                    fontFamily: "'Bricolage Grotesque', sans-serif",
+                    textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                    letterSpacing: '0.01em'
+                  }}>
+                  Notes
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                  {/* Size Control Buttons - Desktop only */}
+                  {!isMobile && (
+                    <div className="flex items-center gap-1.5 border-r border-white border-opacity-30 pr-3 mr-3">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPopupSize(prev => ({
+                            width: Math.max(450, prev.width - 50),
+                            height: Math.max(400, prev.height - 50)
+                      }));
+                    }}
+                        className="text-white hover:text-white transition-all p-1.5 rounded-lg hover:bg-opacity-30"
+                    style={{ 
+                          backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                          borderRadius: '0.5rem',
+                          cursor: 'pointer',
+                          backdropFilter: 'blur(4px)'
+                    }}
+                    title="Make Smaller"
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.25)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'}
+                  >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPopupSize(prev => ({
+                        width: Math.min(window.innerWidth * 0.9, prev.width + 50),
+                        height: Math.min(window.innerHeight * 0.9, prev.height + 50)
+                      }));
+                    }}
+                        className="text-white hover:text-white transition-all p-1.5 rounded-lg hover:bg-opacity-30"
+                    style={{ 
+                          backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                          borderRadius: '0.5rem',
+                          cursor: 'pointer',
+                          backdropFilter: 'blur(4px)'
+                    }}
+                    title="Make Bigger"
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.25)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'}
+                  >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </div>
+                  )}
+                
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowNotesPopup(false);
+                  }}
+                    className={`text-white hover:text-white transition-all ${isMobile ? 'p-2' : 'p-1.5'} rounded-lg hover:bg-opacity-30 flex-shrink-0`}
+                  style={{ 
+                      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                      borderRadius: '0.5rem',
+                      cursor: 'pointer',
+                      backdropFilter: 'blur(4px)'
+                  }}
+                  title="Close"
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.25)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'}
+                >
+                    <svg className={`${isMobile ? 'w-5 h-5' : 'w-5 h-5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+              {/* Resize Handle - Bottom Right Corner (Desktop only) */}
+              {!isMobile && (
+            <div
+              className="absolute bottom-0 right-0 w-6 h-6"
+              style={{
+                background: 'linear-gradient(135deg, transparent 0%, transparent 50%, rgba(30, 101, 173, 0.3) 50%, rgba(30, 101, 173, 0.3) 100%)',
+                borderBottomRightRadius: '0.5rem',
+                cursor: 'nwse-resize'
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                setIsResizing(true);
+                setResizeStart({
+                  x: e.clientX,
+                  y: e.clientY,
+                  width: popupSize.width,
+                  height: popupSize.height
+                });
+              }}
+              onMouseEnter={(e) => {
+                if (!isResizing) {
+                  e.currentTarget.style.cursor = 'nwse-resize';
+                }
+              }}
+              title="Drag to resize"
+            />
+              )}
+
+            {/* Folder Selector - Dropdown Style */}
+            <div className={`border-b bg-gradient-to-r from-gray-50 to-gray-100 flex items-center ${isMobile ? 'px-3 py-3' : 'px-4 py-3'} flex-shrink-0`} style={{ borderBottom: '1px solid rgba(0, 0, 0, 0.08)' }}>
+              <div className={`flex ${isMobile ? 'flex-col' : 'items-center'} gap-2 flex-1 min-w-0 w-full`}>
+                {/* Folder Dropdown */}
+                <select
+                  value={activeFolderId || ''}
+                  onChange={(e) => {
+                      e.stopPropagation();
+                    const folderId = e.target.value || null;
+                      // Save current folder content before switching
+                      setNotesFolders(prev => prev.map(f => 
+                        f.id === activeFolderId ? { ...f, content: notesContent } : f
+                      ));
+                      // Switch to new folder
+                    if (folderId) {
+                      setActiveFolderId(folderId);
+                      const selectedFolder = notesFolders.find(f => f.id === folderId);
+                      setNotesContent(selectedFolder?.content || '');
+                    } else {
+                      setActiveFolderId('default');
+                      const defaultFolder = notesFolders.find(f => f.id === 'default');
+                      setNotesContent(defaultFolder?.content || '');
+                    }
+                    }}
+                  className={`${isMobile ? 'w-full px-3 py-2.5 text-sm' : 'px-4 py-2.5 text-sm'} rounded-lg font-medium border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer`}
+                  style={{ 
+                    fontFamily: 'Roboto, sans-serif',
+                    minWidth: isMobile ? '100%' : '150px',
+                    appearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 0.75rem center',
+                    paddingRight: isMobile ? '2.5rem' : '3rem',
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <option value="">Unfiled</option>
+                  {notesFolders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+                
+                {/* Add New Folder Button */}
+                {showNewFolderInput ? (
+                  <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : ''}`}>
+                    <input
+                      type="text"
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && newFolderName.trim()) {
+                          const newFolder = {
+                            id: `folder-${Date.now()}`,
+                            name: newFolderName.trim(),
+                            content: ''
+                          };
+                          setNotesFolders([...notesFolders, newFolder]);
+                          setActiveFolderId(newFolder.id);
+                          setNotesContent('');
+                          setNewFolderName('');
+                          setShowNewFolderInput(false);
+                        } else if (e.key === 'Escape') {
+                          setShowNewFolderInput(false);
+                          setNewFolderName('');
+                        }
+                      }}
+                      placeholder="Folder name..."
+                      className={`${isMobile ? 'flex-1 px-3 py-2.5 text-sm' : 'px-3 py-2 text-sm'} border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                      style={{ 
+                        fontFamily: 'Roboto, sans-serif',
+                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                      }}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowNewFolderInput(false);
+                        setNewFolderName('');
+                      }}
+                      className="text-gray-500 hover:text-gray-700 transition-colors p-2 flex-shrink-0"
+                      title="Cancel"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowNewFolderInput(true);
+                    }}
+                    className={`${isMobile ? 'w-full px-4 py-2.5 text-sm' : 'px-4 py-2.5 text-sm'} text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all flex items-center justify-center gap-1.5 font-medium`}
+                    style={{ 
+                      fontFamily: 'Roboto, sans-serif',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Add new folder"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>New Folder</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Content Area - Improved Mobile */}
+            <div className="flex-1 overflow-hidden flex flex-col bg-gray-50" style={{ cursor: 'text', minHeight: 0 }}>
+              <textarea
+                value={notesContent}
+                onChange={(e) => {
+                  setNotesContent(e.target.value);
+                  // Update folder content in real-time
+                  setNotesFolders(prev => prev.map(f => 
+                    f.id === activeFolderId ? { ...f, content: e.target.value } : f
+                  ));
+                }}
+                placeholder="Write your notes here... Use markdown for formatting (e.g., # Heading, **bold**, *italic*)"
+                className={`flex-1 w-full border-0 resize-none focus:outline-none focus:ring-0 ${isMobile ? 'p-4' : 'p-5'}`}
+                style={{ 
+                  fontFamily: 'Roboto, sans-serif',
+                  minHeight: isMobile ? '250px' : '350px',
+                  fontSize: isMobile ? '15px' : '15px',
+                  lineHeight: '1.7',
+                  color: '#1a1a1a',
+                  cursor: 'text',
+                  backgroundColor: '#ffffff',
+                  backgroundImage: 'linear-gradient(to right, #f9fafb 1px, transparent 1px), linear-gradient(to bottom, #f9fafb 1px, transparent 1px)',
+                  backgroundSize: '20px 20px',
+                  letterSpacing: '0.01em'
+                }}
+              />
+            </div>
+
+            {/* Footer */}
+            <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-end'} gap-3 ${isMobile ? 'p-4' : 'p-5'} border-t bg-white flex-shrink-0`} style={{ borderTop: '1px solid rgba(0, 0, 0, 0.08)', boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.05)' }}>
+              {saveMessage && (
+                <div className={`flex-1 ${isMobile ? 'w-full mb-2' : ''} px-4 py-2.5 rounded-lg text-sm font-medium ${
+                  saveMessage.type === 'success' 
+                    ? 'bg-green-50 text-green-700 border border-green-200' 
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`} style={{ fontFamily: 'Roboto, sans-serif' }}>
+                      {saveMessage.text}
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  // Save current folder content before closing
+                  setNotesFolders(prev => prev.map(f => 
+                    f.id === activeFolderId ? { ...f, content: notesContent } : f
+                  ));
+                  setShowNotesPopup(false);
+                }}
+                className={`${isMobile ? 'w-full' : ''} px-5 py-2.5 border-2 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-semibold ${isMobile ? 'text-sm' : 'text-sm'}`}
+                style={{ 
+                  fontFamily: 'Roboto, sans-serif', 
+                  cursor: 'pointer',
+                  borderColor: '#e5e7eb',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                  e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!isUserAuthenticated) {
+                    navigate('/login');
+                    return;
+                  }
+
+                  if (!notesContent.trim()) {
+                    setSaveMessage({ type: 'error', text: 'Please enter some notes before saving.' });
+                    setTimeout(() => setSaveMessage(null), 3000);
+                    return;
+                  }
+
+                  setIsSaving(true);
+                  setSaveMessage(null);
+
+                  try {
+                    // Determine reference type
+                    const referenceType = act.location || act.state || 
+                                         (act.source && act.source.toLowerCase().includes('state')) 
+                                         ? 'state_act' : 'central_act';
+                    
+                    // Extract title from content (first line starting with #) or use act title
+                    const titleMatch = notesContent.match(/^#\s+(.+)$/m);
+                    const title = titleMatch ? titleMatch[1] : (act?.short_title || act?.long_title || 'Untitled Note');
+                    
+                    // Get current folder to check if it has a noteId (existing note)
+                    const currentFolder = notesFolders.find(f => f.id === activeFolderId);
+                    const noteId = currentFolder?.noteId;
+
+                    if (noteId) {
+                      // Update existing note
+                      const updateData = {
+                        title: title,
+                        content: notesContent
+                      };
+                      const response = await apiService.updateNote(noteId, updateData);
+                      
+                      if (response.success) {
+                        // Update local state
+                  setNotesFolders(prev => prev.map(f => 
+                          f.id === activeFolderId ? { ...f, content: notesContent, name: title } : f
+                  ));
+                        // Reload notes to update count
+                        const updatedResponse = await apiService.getNotesByReference(referenceType, act.id);
+                        if (updatedResponse.success && updatedResponse.data && updatedResponse.data.notes) {
+                          setNotesCount(updatedResponse.data.notes.length);
+                        }
+                        setSaveMessage({ type: 'success', text: 'Note updated successfully!' });
+                        setTimeout(() => {
+                          setSaveMessage(null);
+                  setShowNotesPopup(false);
+                        }, 1500);
+                      } else {
+                        setSaveMessage({ type: 'error', text: 'Failed to update note. Please try again.' });
+                        setTimeout(() => setSaveMessage(null), 3000);
+                      }
+                    } else {
+                      // Create new note
+                      const noteData = {
+                        title: title,
+                        content: notesContent,
+                        referenceType: referenceType,
+                        referenceId: act.id,
+                        referenceData: {
+                          short_title: act?.short_title,
+                          long_title: act?.long_title,
+                          ministry: act?.ministry,
+                          year: act?.year,
+                          act_id: act?.act_id,
+                          location: act?.location,
+                          state: act?.state
+                        }
+                      };
+
+                      const response = await apiService.createNoteFromDocument(noteData);
+                      
+                      if (response.success && response.data && response.data.note) {
+                        // Update local state with new note ID
+                        const newNoteId = response.data.note.id;
+                        setNotesFolders(prev => prev.map(f => 
+                          f.id === activeFolderId 
+                            ? { ...f, content: notesContent, name: title, noteId: newNoteId, id: newNoteId } 
+                            : f
+                        ));
+                        // Reload notes to update count
+                        const updatedResponse = await apiService.getNotesByReference(referenceType, act.id);
+                        if (updatedResponse.success && updatedResponse.data && updatedResponse.data.notes) {
+                          setNotesCount(updatedResponse.data.notes.length);
+                        }
+                        setSaveMessage({ type: 'success', text: 'Note saved successfully!' });
+                        setTimeout(() => {
+                          setSaveMessage(null);
+                          setShowNotesPopup(false);
+                        }, 1500);
+                      } else {
+                        setSaveMessage({ type: 'error', text: 'Failed to save note. Please try again.' });
+                        setTimeout(() => setSaveMessage(null), 3000);
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Error saving note:', error);
+                    setSaveMessage({ type: 'error', text: 'An error occurred while saving the note. Please try again.' });
+                    setTimeout(() => setSaveMessage(null), 3000);
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
+                disabled={isSaving}
+                className={`${isMobile ? 'w-full' : ''} px-6 py-2.5 text-white rounded-xl transition-all font-semibold ${isMobile ? 'text-sm' : 'text-sm'} ${
+                  isSaving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                }`}
+                style={{ 
+                  fontFamily: 'Roboto, sans-serif',
+                  background: isSaving 
+                    ? 'linear-gradient(90deg, #1E65AD 0%, #CF9B63 100%)'
+                    : 'linear-gradient(135deg, #1E65AD 0%, #2E7CD6 50%, #CF9B63 100%)',
+                  boxShadow: isSaving 
+                    ? '0 2px 8px rgba(30, 101, 173, 0.3)'
+                    : '0 4px 12px rgba(30, 101, 173, 0.4)',
+                  textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSaving) {
+                    e.target.style.background = 'linear-gradient(135deg, #1a5a9a 0%, #2563eb 50%, #b88a56 100%)';
+                    e.target.style.boxShadow = '0 6px 16px rgba(30, 101, 173, 0.5)';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSaving) {
+                    e.target.style.background = 'linear-gradient(135deg, #1E65AD 0%, #2E7CD6 50%, #CF9B63 100%)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(30, 101, 173, 0.4)';
+                    e.target.style.transform = 'translateY(0)';
+                  }
+                }}
+              >
+                {isSaving ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </span>
+                ) : (
+                  'Save Notes'
+                )}
+              </button>
+              </div>
+            </motion.div>
+        </>
+      )}
+      </AnimatePresence>
+
+
+    </div>
+  );
+}

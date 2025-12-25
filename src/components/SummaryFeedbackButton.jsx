@@ -1,0 +1,504 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ThumbsUp, ThumbsDown, Loader2, X, Check, Copy, Share2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import apiService from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+
+const SummaryFeedbackButton = ({ referenceType, referenceId, onFeedbackSubmitted, summaryText = '' }) => {
+  const { isAuthenticated } = useAuth();
+  const [userRating, setUserRating] = useState(null);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submittingText, setSubmittingText] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
+  const [selectedRating, setSelectedRating] = useState(null);
+  const buttonRef = useRef(null);
+  const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 });
+
+  // Load existing feedback and statistics
+  useEffect(() => {
+    if (isAuthenticated && referenceType && referenceId) {
+      loadFeedback();
+    }
+  }, [isAuthenticated, referenceType, referenceId]);
+
+  // Calculate popup position and handle click outside
+  useEffect(() => {
+    if (showPopup && buttonRef.current) {
+      const updatePosition = () => {
+        if (!buttonRef.current) return;
+        
+        const buttonRect = buttonRef.current.getBoundingClientRect();
+        const popupWidth = 384; // w-96 = 384px
+        const popupHeight = 400; // Approximate height
+        const gap = 8; // Gap between button and popup
+        
+        // Calculate position below the button (using viewport coordinates)
+        let top = buttonRect.bottom + gap;
+        let left = buttonRect.left;
+        
+        // Adjust if popup would go off screen to the right
+        if (left + popupWidth > window.innerWidth - 16) {
+          left = window.innerWidth - popupWidth - 16;
+        }
+        
+        // Adjust if popup would go off screen to the left
+        if (left < 16) {
+          left = 16;
+        }
+        
+        // Adjust if popup would go off screen at bottom - show above instead
+        if (buttonRect.bottom + popupHeight + gap > window.innerHeight - 16) {
+          top = buttonRect.top - popupHeight - gap;
+          // If still off screen at top, position at center vertically
+          if (top < 16) {
+            top = Math.max(16, (window.innerHeight - popupHeight) / 2);
+          }
+        }
+        
+        // Ensure minimum top position
+        if (top < 16) {
+          top = 16;
+        }
+        
+        setPopupPosition({ top, left });
+      };
+      
+      updatePosition();
+      
+      // Update position on scroll and resize
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+      
+      const handleClickOutside = (event) => {
+        const target = event.target;
+        // Check if click is outside the popup and buttons
+        if (!target.closest('.feedback-popup-container') && !target.closest('button[title="Helpful"]') && !target.closest('button[title="Not Helpful"]')) {
+          setShowPopup(false);
+          setFeedbackText('');
+        }
+      };
+      
+      // Add event listener after a small delay to avoid immediate closing
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 100);
+      
+      return () => {
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+        clearTimeout(timeoutId);
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showPopup]);
+
+  const loadFeedback = async () => {
+    if (!isAuthenticated) return;
+    
+    setLoading(true);
+    try {
+      const response = await apiService.getSummaryFeedback(referenceType, referenceId);
+      if (response && response.user_feedback) {
+        setUserRating(response.user_feedback.rating);
+        setFeedbackText(response.user_feedback.feedback_text || '');
+      }
+    } catch (error) {
+      console.error('Error loading feedback:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRatingClick = async (rating) => {
+    if (!isAuthenticated) {
+      alert('Please login to provide feedback');
+      return;
+    }
+
+    if (submitting) return;
+
+    const newRating = userRating === rating ? null : rating; // Toggle if same rating clicked
+    setUserRating(newRating);
+    setSelectedRating(newRating);
+    setSubmitting(true);
+
+    try {
+      await apiService.submitSummaryFeedback({
+        reference_type: referenceType,
+        reference_id: referenceId,
+        rating: newRating,
+        feedback_text: null
+      });
+
+      if (onFeedbackSubmitted) {
+        onFeedbackSubmitted();
+      }
+      
+      // Show popup with input field after successful submission
+      if (newRating) {
+        setShowPopup(true);
+        setFeedbackText(''); // Reset feedback text
+      }
+      
+      // Reload feedback
+      await loadFeedback();
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      // Revert rating on error
+      setUserRating(userRating);
+      alert('Failed to submit feedback. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleTextFeedbackSubmit = async () => {
+    if (submittingText) return;
+
+    setSubmittingText(true);
+    try {
+      await apiService.submitSummaryFeedback({
+        reference_type: referenceType,
+        reference_id: referenceId,
+        rating: selectedRating,
+        feedback_text: feedbackText.trim() || null
+      });
+
+      if (onFeedbackSubmitted) {
+        onFeedbackSubmitted();
+      }
+      
+      // Close popup after successful submission
+      setShowPopup(false);
+      setFeedbackText('');
+      
+      // Reload feedback
+      await loadFeedback();
+    } catch (error) {
+      console.error('Error submitting text feedback:', error);
+      alert('Failed to submit feedback. Please try again.');
+    } finally {
+      setSubmittingText(false);
+    }
+  };
+
+  const [copied, setCopied] = useState(false);
+
+  // Remove markdown formatting for plain text
+  const getPlainTextSummary = (markdownText) => {
+    if (!markdownText) return "";
+    return markdownText
+      .replace(/#{1,6}\s+/g, '') // Remove headers
+      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold
+      .replace(/\*(.*?)\*/g, '$1') // Remove italic
+      .replace(/`(.*?)`/g, '$1') // Remove inline code
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Remove links
+      .replace(/\n{3,}/g, '\n\n') // Remove excessive newlines
+      .trim();
+  };
+
+  // Generate share/copy content
+  const getShareContent = () => {
+    const plainSummary = getPlainTextSummary(summaryText);
+    const currentUrl = window.location.href;
+    return `🚀 Want more awesome stuff like this? Discover it on Salhakar !
+
+${currentUrl}
+
+Copied from Salhakar - Share the love!
+
+${plainSummary}`;
+  };
+
+  const handleCopy = async () => {
+    if (!summaryText || summaryText.trim() === '') {
+      alert('No summary content available to copy');
+      return;
+    }
+
+    try {
+      const contentToCopy = getShareContent();
+      await navigator.clipboard.writeText(contentToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = getShareContent();
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (e) {
+        alert('Failed to copy text');
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!summaryText || summaryText.trim() === '') {
+      return;
+    }
+
+    // Always use full format for sharing
+    const contentToShare = getShareContent();
+    const currentUrl = window.location.href;
+    const plainSummary = getPlainTextSummary(summaryText);
+    
+    // Create share text with full format - ensure summary is included
+    const shareText = `🚀 Want more awesome stuff like this? Discover it on Salhakar !\n\n${currentUrl}\n\nCopied from Salhakar - Share the love!\n\n${plainSummary}`;
+
+    // Always copy full format to clipboard first
+    try {
+      await navigator.clipboard.writeText(contentToShare);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (copyErr) {
+      console.error('Failed to copy to clipboard:', copyErr);
+    }
+
+    // Try native share API - but ensure text is properly formatted
+    // Some platforms ignore text field, so we put summary in title too
+    const shareData = {
+      title: `🚀 Legal Summary from Salhakar\n\n${plainSummary.substring(0, 200)}${plainSummary.length > 200 ? '...' : ''}`,
+      text: shareText, // Full format with summary
+      url: currentUrl
+    };
+
+    try {
+      if (navigator.share && navigator.canShare) {
+        // Try sharing with full text
+        if (navigator.canShare(shareData)) {
+          try {
+            await navigator.share(shareData);
+            // Share succeeded - content is also in clipboard
+            return;
+          } catch (shareErr) {
+            // If share fails, content is already in clipboard
+            if (shareErr.name === 'AbortError') {
+              return; // User cancelled
+            }
+          }
+        }
+        
+        // If full share doesn't work, try with text in title (some platforms only use title)
+        const titleWithSummary = `🚀 Want more awesome stuff like this? Discover it on Salhakar !\n\n${currentUrl}\n\nCopied from Salhakar - Share the love!\n\n${plainSummary.substring(0, 500)}${plainSummary.length > 500 ? '...' : ''}`;
+        const fallbackShareData = {
+          title: titleWithSummary,
+          text: shareText.substring(0, 1000), // Truncated text
+          url: currentUrl
+        };
+        
+        if (navigator.canShare(fallbackShareData)) {
+          try {
+            await navigator.share(fallbackShareData);
+            return;
+          } catch (shareErr) {
+            if (shareErr.name === 'AbortError') {
+              return; // User cancelled
+            }
+          }
+        }
+      }
+      
+      // If native share not available or failed, content is already in clipboard
+      // User can paste it manually
+    } catch (err) {
+      // Error occurred, but content is already in clipboard
+      if (err.name !== 'AbortError') {
+        console.log('Share error, but content is in clipboard');
+      }
+    }
+  };
+
+  return (
+    <>
+      <div ref={buttonRef} className="relative flex items-center gap-2">
+        {/* Copy Button - First */}
+        <motion.button
+          onClick={handleCopy}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          className="p-1.5 rounded-lg transition-all bg-gray-100 hover:bg-gray-200 cursor-pointer"
+          title="Copy summary"
+        >
+          {copied ? (
+            <Check className="w-3.5 h-3.5" style={{ color: '#10B981' }} />
+          ) : (
+            <Copy className="w-3.5 h-3.5" style={{ color: '#8C969F' }} />
+          )}
+        </motion.button>
+
+        {/* Thumbs Up Button - Second */}
+        {isAuthenticated && (
+          <motion.button
+            onClick={() => handleRatingClick('thumbs_up')}
+            disabled={submitting || loading}
+            whileHover={{ scale: submitting ? 1 : 1.1 }}
+            whileTap={{ scale: submitting ? 1 : 0.9 }}
+            className={`p-1.5 rounded-lg transition-all ${
+              userRating === 'thumbs_up'
+                ? 'bg-blue-100'
+                : 'bg-gray-100 hover:bg-gray-200'
+            } ${submitting || loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            title="Helpful"
+          >
+            {submitting && userRating === 'thumbs_up' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: '#1E65AD' }} />
+            ) : (
+              <ThumbsUp 
+                className="w-3.5 h-3.5" 
+                style={{ 
+                  color: userRating === 'thumbs_up' ? '#1E65AD' : '#8C969F',
+                  fill: userRating === 'thumbs_up' ? '#1E65AD' : 'none'
+                }} 
+              />
+            )}
+          </motion.button>
+        )}
+
+        {/* Thumbs Down Button - Third */}
+        {isAuthenticated && (
+          <motion.button
+            onClick={() => handleRatingClick('thumbs_down')}
+            disabled={submitting || loading}
+            whileHover={{ scale: submitting ? 1 : 1.1 }}
+            whileTap={{ scale: submitting ? 1 : 0.9 }}
+            className={`p-1.5 rounded-lg transition-all ${
+              userRating === 'thumbs_down'
+                ? 'bg-blue-100'
+                : 'bg-gray-100 hover:bg-gray-200'
+            } ${submitting || loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            title="Not Helpful"
+          >
+            {submitting && userRating === 'thumbs_down' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: '#1E65AD' }} />
+            ) : (
+              <ThumbsDown 
+                className="w-3.5 h-3.5" 
+                style={{ 
+                  color: userRating === 'thumbs_down' ? '#1E65AD' : '#8C969F',
+                  fill: userRating === 'thumbs_down' ? '#1E65AD' : 'none'
+                }} 
+              />
+            )}
+          </motion.button>
+        )}
+
+        {/* Share Button - Last */}
+        <motion.button
+          onClick={handleShare}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          className="p-1.5 rounded-lg transition-all bg-gray-100 hover:bg-gray-200 cursor-pointer"
+          title="Share summary"
+        >
+          <Share2 className="w-3.5 h-3.5" style={{ color: '#8C969F' }} />
+        </motion.button>
+      </div>
+
+      {/* Feedback Popup - Positioned below buttons */}
+      <AnimatePresence>
+        {showPopup && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="feedback-popup-container fixed z-[10001] bg-white rounded-xl shadow-2xl p-6 w-80 sm:w-96"
+            style={{ 
+              border: '2px solid #E5E7EB',
+              top: `${popupPosition.top}px`,
+              left: `${popupPosition.left}px`,
+              maxHeight: 'calc(100vh - 20px)',
+              overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                  <Check className="w-6 h-6" style={{ color: '#10B981' }} />
+                </div>
+                <h3 className="text-lg font-semibold" style={{ color: '#1F2937', fontFamily: 'Heebo, sans-serif' }}>
+                  Thank You!
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPopup(false);
+                  setFeedbackText('');
+                }}
+                className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5" style={{ color: '#6B7280' }} />
+              </button>
+            </div>
+            
+            <p className="text-sm mb-4" style={{ color: '#6B7280', fontFamily: 'Roboto, sans-serif' }}>
+              Thank you for your feedback! Would you like to share more details? (Optional)
+            </p>
+
+            {/* Text Input */}
+            <div className="mb-4">
+              <textarea
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder="Share your thoughts about this summary..."
+                rows={4}
+                maxLength={2000}
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
+                style={{ 
+                  fontFamily: 'Roboto, sans-serif',
+                  fontSize: '14px'
+                }}
+              />
+              <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                {feedbackText.length}/2000 characters
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setShowPopup(false);
+                  setFeedbackText('');
+                }}
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors hover:bg-gray-100"
+                style={{ 
+                  color: '#6B7280',
+                  fontFamily: 'Roboto, sans-serif'
+                }}
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleTextFeedbackSubmit}
+                disabled={submittingText}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                style={{ 
+                  backgroundColor: '#1E65AD',
+                  fontFamily: 'Roboto, sans-serif'
+                }}
+              >
+                {submittingText ? 'Submitting...' : 'Submit'}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+
+export default SummaryFeedbackButton;
+

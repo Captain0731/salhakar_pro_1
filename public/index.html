@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Web site created using create-react-app"
+    />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <!--
+      manifest.json provides metadata used when your web app is installed on a
+      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
+    -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <!-- Preload Footer Logo for immediate display -->
+    <link rel="preload" as="image" href="%PUBLIC_URL%/main4.PNG" fetchpriority="high" />
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Heebo:wght@100..900&display=swap" rel="stylesheet">
+    <!-- Noto Sans fonts for Indic languages -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Gujarati:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;600;700&family=Noto+Sans+Kannada:wght@400;500;600;700&family=Noto+Sans+Malayalam:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Google Translate Styles - Hide all UI elements -->
+    <style>
+      /* Hide Google Translate banner/bar - Multiple selectors */
+      .goog-te-banner-frame.skiptranslate,
+      .goog-te-banner-frame,
+      .skiptranslate,
+      .goog-te-banner-frame.skiptranslate iframe,
+      .goog-te-banner-frame iframe {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        position: absolute !important;
+        left: -9999px !important;
+        top: -9999px !important;
+      }
+      
+      /* Hide Google Translate toolbar */
+      .goog-te-ftab,
+      .goog-te-ftab-link {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+      }
+      
+      /* Hide Google Translate gadget */
+      .goog-te-gadget,
+      .goog-te-gadget-simple {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        font-size: 0 !important;
+      }
+      
+      /* Hide Google Translate combo box */
+      .goog-te-combo {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+      }
+      
+      /* Hide Google Translate logo */
+      .goog-te-logo {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+      }
+      
+      /* Ensure body doesn't get shifted by Google Translate */
+      body {
+        top: 0px !important;
+        margin-top: 0px !important;
+        padding-top: 0px !important;
+      }
+      
+      /* Hide any Google Translate frames */
+      iframe.goog-te-banner-frame,
+      iframe[src*="translate.google.com"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+      }
+      
+      /* Hide Google Translate banner completely - More aggressive */
+      .goog-te-banner-frame {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        position: absolute !important;
+        left: -9999px !important;
+        top: -9999px !important;
+        z-index: -9999 !important;
+      }
+      
+      /* Hide any div with Google Translate classes */
+      div[class*="goog-te"],
+      div[class*="skiptranslate"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+      }
+      
+      /* Hide Google Translate footer and links */
+      .goog-te-ftab-link,
+      .goog-te-ftab {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+      }
+      
+      /* Additional aggressive hiding */
+      *[class*="goog-te"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+      }
+      
+      /* Hide any element with Google Translate in the class name */
+      [class*="goog-te-banner"],
+      [class*="goog-te-ftab"],
+      [class*="goog-te-gadget"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        position: absolute !important;
+        left: -9999px !important;
+        top: -9999px !important;
+      }
+    </style>
+    <!-- Font Awesome -->
+    <script src="https://kit.fontawesome.com/9ed711c3e8.js" crossorigin="anonymous"></script>
+    <!-- Suppress MetaMask Connection Errors - Must run before React -->
+    <script>
+      // Suppress MetaMask connection errors before React loads
+      (function() {
+        // Suppress console errors
+        const originalError = console.error;
+        console.error = function(...args) {
+          const message = args[0]?.toString() || '';
+          const fullMessage = args.map(arg => String(arg)).join(' ');
+          
+          if (
+            message.includes('Failed to connect to MetaMask') ||
+            (message.includes('MetaMask') && message.includes('connect')) ||
+            fullMessage.includes('Failed to connect to MetaMask') ||
+            (fullMessage.includes('MetaMask') && fullMessage.includes('connect'))
+          ) {
+            return; // Suppress MetaMask errors
+          }
+          originalError.apply(console, args);
+        };
+        
+        // Global error handler
+        window.addEventListener('error', function(event) {
+          const errorMessage = event.message || event.error?.message || '';
+          const errorStack = event.error?.stack || '';
+          const errorSource = event.filename || '';
+          
+          if (
+            errorMessage.includes('Failed to connect to MetaMask') ||
+            (errorMessage.includes('MetaMask') && errorMessage.includes('connect')) ||
+            errorStack.includes('Failed to connect to MetaMask') ||
+            (errorStack.includes('MetaMask') && errorStack.includes('connect')) ||
+            errorSource.includes('nkbihfbeogaeaoehlefnkodbefgpgknn')
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            return false;
+          }
+        }, true);
+        
+        // Handle unhandled promise rejections
+        window.addEventListener('unhandledrejection', function(event) {
+          const reason = event.reason?.message || event.reason?.toString() || '';
+          const reasonStack = event.reason?.stack || '';
+          
+          if (
+            reason.includes('Failed to connect to MetaMask') ||
+            (reason.includes('MetaMask') && reason.includes('connect')) ||
+            reasonStack.includes('Failed to connect to MetaMask') ||
+            (reasonStack.includes('MetaMask') && reasonStack.includes('connect'))
+          ) {
+            event.preventDefault();
+            return false;
+          }
+        });
+        
+        // Hide React error overlay if it shows MetaMask errors
+        const hideReactErrorOverlay = () => {
+          // Check for React error overlay
+          const overlay = document.querySelector('#react-error-overlay');
+          if (overlay) {
+            const overlayText = overlay.textContent || overlay.innerText || '';
+            if (
+              overlayText.includes('Failed to connect to MetaMask') ||
+              (overlayText.includes('MetaMask') && overlayText.includes('connect'))
+            ) {
+              overlay.style.display = 'none';
+              overlay.remove();
+            }
+          }
+          
+          // Also check for iframe overlay (React's error overlay is often in an iframe)
+          const iframes = document.querySelectorAll('iframe');
+          iframes.forEach(iframe => {
+            try {
+              const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+              if (iframeDoc) {
+                const iframeText = iframeDoc.body?.textContent || '';
+                if (
+                  iframeText.includes('Failed to connect to MetaMask') ||
+                  (iframeText.includes('MetaMask') && iframeText.includes('connect'))
+                ) {
+                  iframe.style.display = 'none';
+                  iframe.remove();
+                }
+              }
+            } catch (e) {
+              // Cross-origin iframe, ignore
+            }
+          });
+        };
+        
+        // Monitor for React error overlay
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', () => {
+            setInterval(hideReactErrorOverlay, 100);
+          });
+        } else {
+          setInterval(hideReactErrorOverlay, 100);
+        }
+      })();
+    </script>
+    <!-- Immediate Google Translate Hiding Script -->
+    <script>
+      // Hide Google Translate elements immediately
+      (function() {
+        const hideGoogleElements = () => {
+          const selectors = [
+            '.goog-te-banner-frame',
+            '.goog-te-ftab',
+            '.goog-te-gadget',
+            '.goog-te-combo',
+            '.goog-te-logo',
+            '.skiptranslate',
+            '[class*="goog-te"]',
+            'iframe[src*="translate.google.com"]'
+          ];
+          
+          selectors.forEach(selector => {
+            const elements = document.querySelectorAll(selector);
+            elements.forEach(el => {
+              if (el) {
+                el.style.display = 'none';
+                el.style.visibility = 'hidden';
+                el.style.opacity = '0';
+                el.style.height = '0';
+                el.style.width = '0';
+                el.style.position = 'absolute';
+                el.style.left = '-9999px';
+                el.style.top = '-9999px';
+                el.style.zIndex = '-9999';
+              }
+            });
+          });
+        };
+        
+        // Hide immediately
+        hideGoogleElements();
+        
+        // Hide when DOM is ready
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', hideGoogleElements);
+        }
+        
+        // Hide periodically
+        setInterval(hideGoogleElements, 100);
+      })();
+    </script>
+    <!--
+      Notice the use of %PUBLIC_URL% in the tags above.
+      It will be replaced with the URL of the `public` folder during the build.
+      Only files inside the `public` folder can be referenced from the HTML.
+
+      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
+      work correctly both with client-side routing and a non-root public URL.
+      Learn how to configure a non-root public URL by running `npm run build`.
+    -->
+    <title>सलहाकार - AI Legal Platform</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <!--
+      This HTML file is a template.
+      If you open it directly in the browser, you will see an empty page.
+
+      You can add webfonts, meta tags, or analytics to this file.
+      The build step will place the bundled scripts into the <body> tag.
+
+      To begin the development, run `npm start` or `yarn start`.
+      To create a production bundle, use `npm run build` or `yarn build`.
+    -->
+  </body>
+</html>

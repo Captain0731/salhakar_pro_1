@@ -1,0 +1,10 @@
+{
+  "root": "build",
+  "clean_urls": false,
+  "routes": {
+    "/**": "index.html"
+  },
+  "buildCommand": "NODE_OPTIONS=--max-old-space-size=4096 CI=false npm run build",
+  "installCommand": "npm install"
+}
+
