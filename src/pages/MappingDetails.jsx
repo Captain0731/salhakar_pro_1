@@ -60,17 +60,67 @@ export default function MappingDetails() {
   }, []);
 
   useEffect(() => {
-    // Get mapping data from location state
-    if (location.state?.mapping) {
-      setMapping(location.state.mapping);
-      setLoading(false);
-    } else {
-      // If no mapping data, redirect back to law-mapping page with type from URL
+    const loadMappingData = async () => {
+      // First, try to get mapping from location state
+      if (location.state?.mapping) {
+        setMapping(location.state.mapping);
+        setLoading(false);
+        return;
+      }
+
+      // If no mapping in state, try to fetch from API using query parameters
       const searchParams = new URLSearchParams(location.search);
-      const typeParam = searchParams.get('type');
-      const redirectUrl = typeParam ? `/law-mapping?type=${typeParam}` : '/law-mapping';
-      navigate(redirectUrl);
-    }
+      const mappingId = searchParams.get('id');
+      const mappingTypeParam = searchParams.get('mapping_type') || searchParams.get('type');
+      
+      if (mappingId) {
+        try {
+          setLoading(true);
+          setError('');
+          
+          // Determine mapping type for API call
+          let mappingTypeForApi = mappingTypeParam;
+          if (!mappingTypeForApi) {
+            // Try to determine from URL or default
+            mappingTypeForApi = 'bns_ipc'; // default
+          }
+          
+          // Convert mapping type format if needed (bns_ipc_mapping -> bns_ipc)
+          if (mappingTypeForApi.includes('_mapping')) {
+            mappingTypeForApi = mappingTypeForApi.replace('_mapping', '');
+          }
+          
+          console.log('🔍 Fetching mapping from API:', { mappingId, mappingTypeForApi });
+          const mappingData = await apiService.getLawMappingById(mappingId, mappingTypeForApi);
+          
+          if (mappingData) {
+            setMapping(mappingData);
+            setLoading(false);
+          } else {
+            throw new Error('Mapping not found');
+          }
+        } catch (err) {
+          console.error('❌ Error fetching mapping:', err);
+          setError('Failed to load mapping details. Please try again.');
+          setLoading(false);
+          // Redirect back after a short delay
+          setTimeout(() => {
+            const redirectUrl = mappingTypeParam 
+              ? `/law-mapping?type=${mappingTypeParam}` 
+              : '/law-mapping';
+            navigate(redirectUrl);
+          }, 2000);
+        }
+      } else {
+        // No ID in query params and no state - redirect back
+        const redirectUrl = mappingTypeParam 
+          ? `/law-mapping?type=${mappingTypeParam}` 
+          : '/law-mapping';
+        navigate(redirectUrl);
+      }
+    };
+
+    loadMappingData();
   }, [location.state, location.search, navigate]);
 
 
