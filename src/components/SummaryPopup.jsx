@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import apiService from "../services/api";
 import SummaryFeedbackButton from "./SummaryFeedbackButton";
 
-const SummaryPopup = ({ isOpen, onClose, item, itemType }) => {
+const SummaryPopup = ({ isOpen, onClose, item, itemType, courtType }) => {
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -18,7 +18,7 @@ const SummaryPopup = ({ isOpen, onClose, item, itemType }) => {
       setSummary("");
       setError("");
     }
-  }, [isOpen, item]);
+  }, [isOpen, item, courtType]);
 
   const fetchSummary = async () => {
     if (!item) return;
@@ -36,8 +36,11 @@ const SummaryPopup = ({ isOpen, onClose, item, itemType }) => {
         if (item.id) {
           try {
             const summaryResponse = await apiService.getJudgementSummary(item.id, {
-              format: 'markdown'
+              format: 'markdown',
+              court_type: courtType // Pass court type to backend
             });
+            
+            console.log('📄 Summary response with court type:', { courtType, summaryResponse });
             
             if (summaryResponse && summaryResponse.success && summaryResponse.summary) {
               summaryText = summaryResponse.summary;
@@ -117,7 +120,17 @@ const SummaryPopup = ({ isOpen, onClose, item, itemType }) => {
               );
               
               if (summaryResponse && summaryResponse.success && summaryResponse.summary) {
-                summaryText = summaryResponse.summary;
+                // Extract summary text - handle both string and object responses
+                const summaryData = summaryResponse.summary;
+                if (typeof summaryData === 'string') {
+                  summaryText = summaryData;
+                } else if (typeof summaryData === 'object' && summaryData.summary) {
+                  // If summary is an object with a summary field, extract it
+                  summaryText = summaryData.summary;
+                } else {
+                  // Fallback: stringify if it's an object (shouldn't happen, but handle it)
+                  summaryText = typeof summaryData === 'object' ? JSON.stringify(summaryData, null, 2) : String(summaryData);
+                }
               } else {
                 // Fallback: use existing summary or description
                 summaryText = item.summary || item.description || item.source_description || "";
@@ -197,7 +210,8 @@ const SummaryPopup = ({ isOpen, onClose, item, itemType }) => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 pt-0 sm:pt-20"
+          className="fixed left-0 right-0 bottom-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ top: '88px' }}
           onClick={onClose}
         >
           {/* Backdrop with better blur */}
