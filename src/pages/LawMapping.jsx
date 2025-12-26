@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { AutoComplete } from 'primereact/autocomplete';
 import Navbar from "../components/landing/Navbar";
 import apiService from "../services/api";
 import useSmoothInfiniteScroll from "../hooks/useSmoothInfiniteScroll";
@@ -122,18 +121,6 @@ export default function LawMapping() {
   // Filter visibility state
   const [showFilters, setShowFilters] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false); // Track if user has scrolled
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // Mobile sidebar state
-  
-  // Detect mobile view
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Data states
   const [mappings, setMappings] = useState([]);
@@ -654,341 +641,30 @@ export default function LawMapping() {
 
   const mappingTypeLabel = mappingTypes.find(m => m.value === mappingType)?.label || "Law Mapping";
 
-  // Helper function to get input value (for AutoComplete compatibility)
-  const getInputValue = (filterName) => {
-    return filters[filterName] || '';
-  };
-
-  // Helper function to handle input focus
-  const handleInputFocus = (filterName) => {
-    // Can be extended if needed
-  };
-
-  // Helper function to handle input blur
-  const handleInputBlur = (filterName) => {
-    // Can be extended if needed
-  };
-
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F9FAFC' }}>
       <Navbar />
       
-      {/* Mobile Sticky Header with Hamburger Menu and Search Bar - Mobile Only */}
-      <div className="md:hidden w-full bg-white border-b border-gray-200 fixed left-0 right-0 z-30 shadow-sm" style={{ position: 'fixed', top: '56px', left: 0, right: 0 }}>
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center gap-3">
-            {/* Hamburger Menu Button */}
-            <button
-              onClick={() => setMobileSidebarOpen(true)}
-              className="p-2 flex items-center justify-center hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0"
-              aria-label="Open filters menu"
-              style={{ color: '#1E65AD' }}
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            
-            {/* Search Bar - Simplified for mobile */}
-            <div className="flex-1">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200" style={{ backgroundColor: '#FFFFFF' }}>
-                <div className="relative">
-                  <AutoComplete
-                    value={getInputValue('word_search')}
-                    onChange={(e) => {
-                      const value = e.value || '';
-                      handleFilterChange('word_search', value);
-                    }}
-                    onFocus={() => handleInputFocus('word_search')}
-                    onBlur={() => handleInputBlur('word_search')}
-                    placeholder="Search mappings..."
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !loading && !isFetchingRef.current) {
-                        e.preventDefault();
-                        applyFilters();
-                      }
-                    }}
-                    suggestions={[]}
-                    completeMethod={() => {}}
-                    className="w-full"
-                    inputClassName="w-full px-4 py-2.5 pl-10 pr-10 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1E65AD] focus:border-[#1E65AD] text-sm shadow-sm bg-white transition-all"
-                    inputStyle={{ fontFamily: "'Heebo', sans-serif", backgroundColor: '#FFFFFF' }}
-                    panelClassName="hidden"
-                    dropdown={false}
-                  />
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5" style={{ color: '#1E65AD' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* HEADER - About Us Style */}
-      <div className="w-full bg-white pt-32 sm:pt-36 md:pt-20 lg:pt-24 xl:pt-28 pb-8 sm:pb-10 md:pb-12 border-b border-gray-200">
+      {/* FULL-WIDTH HEADER */}
+      <div className="w-full bg-white border-b border-gray-200 pt-12 pb-4">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
-          {/* Centered Header Content */}
           <div className="text-center">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-4" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+            <h1 className="text-xl md:text-2xl font-bold mb-2" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
               Law Mapping
             </h1>
-            {/* Thick Orange-Brown Line */}
-            <div className="w-16 sm:w-20 h-1 mx-auto mb-4 sm:mb-5" style={{ backgroundColor: '#CF9B63' }}></div>
-            {/* Subtitle */}
-            <p className="text-sm sm:text-base md:text-lg text-gray-600 max-w-3xl mx-auto px-4" style={{ fontFamily: "'Heebo', sans-serif" }}>
+            <div className="w-12 h-0.5 mx-auto mb-2" style={{ backgroundColor: '#CF9B63' }}></div>
+            <p className="text-xs md:text-sm text-gray-600 max-w-3xl mx-auto" style={{ fontFamily: 'Roboto, sans-serif' }}>
               Navigate the transition from old legal codes to new ones. Map sections between IPC-BNS, IEA-BSA, and CrPC-BNSS.
             </p>
           </div>
         </div>
       </div>
       
-      {/* Mobile Sidebar Overlay */}
-      <AnimatePresence>
-        {mobileSidebarOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black bg-opacity-50 z-[60] md:hidden"
-              onClick={() => setMobileSidebarOpen(false)}
-            />
-            <motion.aside 
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="fixed left-0 top-0 bottom-0 w-80 bg-white shadow-2xl z-[70] md:hidden overflow-y-auto"
-            >
-              {/* Mobile Sidebar Header */}
-              <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 pt-20uplode flex items-center justify-between z-10">
-                <div className="flex items-center gap-3">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} style={{ color: '#1E65AD' }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                  <h2 className="text-lg font-semibold" style={{ color: '#1E65AD', fontFamily: "'Heebo', sans-serif" }}>Filters</h2>
-                </div>
-                <button
-                  onClick={() => setMobileSidebarOpen(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="Close filters menu"
-                >
-                  <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Mobile Sidebar Content - Same as Desktop Sidebar */}
-              <div className="p-4">
-                {/* Mapping Type Toggle */}
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-gray-700 mb-2" style={{ fontFamily: "'Heebo', sans-serif" }}>
-                    Mapping Type
-                  </label>
-                  <div className="relative w-full flex items-center bg-gray-100 rounded-xl p-1 shadow-inner">
-                    <motion.div
-                      className="absolute top-0.5 bottom-0.5 rounded-lg z-0"
-                      initial={false}
-                      animate={{
-                        left: mappingType === 'bns_ipc' ? '2px' : mappingType === 'bsa_iea' ? 'calc(33.33% + 1px)' : 'calc(66.66% + 1px)',
-                        backgroundColor: mappingType === 'bns_ipc' ? '#1E65AD' : mappingType === 'bsa_iea' ? '#CF9B63' : '#8C969F',
-                      }}
-                      transition={{ 
-                        type: "spring", 
-                        stiffness: 300, 
-                        damping: 30 
-                      }}
-                      style={{
-                        width: 'calc(33.33% - 2px)',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                      }}
-                    />
-                    <motion.button
-                      onClick={() => updateMappingType('bns_ipc')}
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.99 }}
-                      className={`flex-1 px-2 py-2 rounded-lg font-semibold transition-all duration-300 relative z-10 text-xs ${
-                        mappingType === 'bns_ipc'
-                          ? 'text-white'
-                          : 'text-gray-600 hover:text-gray-800'
-                      }`}
-                      style={{ fontFamily: "'Heebo', sans-serif" }}
-                    >
-                      IPC ↔ BNS
-                    </motion.button>
-                    <motion.button
-                      onClick={() => updateMappingType('bsa_iea')}
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.99 }}
-                      className={`flex-1 px-2 py-2 rounded-lg font-semibold transition-all duration-300 relative z-10 text-xs ${
-                        mappingType === 'bsa_iea'
-                          ? 'text-white'
-                          : 'text-gray-600 hover:text-gray-800'
-                      }`}
-                      style={{ fontFamily: "'Heebo', sans-serif" }}
-                    >
-                      IEA ↔ BSA
-                    </motion.button>
-                    <motion.button
-                      onClick={() => updateMappingType('bnss_crpc')}
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.99 }}
-                      className={`flex-1 px-2 py-2 rounded-lg font-semibold transition-all duration-300 relative z-10 text-xs ${
-                        mappingType === 'bnss_crpc'
-                          ? 'text-white'
-                          : 'text-gray-600 hover:text-gray-800'
-                      }`}
-                      style={{ fontFamily: "'Heebo', sans-serif" }}
-                    >
-                      CrPC ↔ BNSS
-                    </motion.button>
-                  </div>
-                </div>
-                
-                {/* Filter Fields Section */}
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "'Heebo', sans-serif" }}>
-                      Subject
-                    </label>
-                    <input
-                      type="text"
-                      value={filters.subject}
-                      onChange={(e) => handleFilterChange('subject', e.target.value)}
-                      placeholder="e.g., Theft, Murder"
-                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E65AD] focus:border-[#1E65AD] bg-white"
-                      style={{ fontFamily: "'Heebo', sans-serif" }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "'Heebo', sans-serif" }}>
-                      Section (Any)
-                    </label>
-                    <input
-                      type="text"
-                      value={filters.section}
-                      onChange={(e) => handleFilterChange('section', e.target.value)}
-                      placeholder="e.g., 302, 103"
-                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E65AD] focus:border-[#1E65AD] bg-white"
-                      style={{ fontFamily: "'Heebo', sans-serif" }}
-                    />
-                    <p className="text-[10px] text-gray-500 mt-1">Searches in both sections</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "'Heebo', sans-serif" }}>
-                      {mappingType === 'bns_ipc' ? 'BNS Section' : mappingType === 'bsa_iea' ? 'BSA Section' : 'BNSS Section'}
-                    </label>
-                    <input
-                      type="text"
-                      value={filters.source_section}
-                      onChange={(e) => handleFilterChange('source_section', e.target.value)}
-                      placeholder={mappingType === 'bns_ipc' ? 'e.g., 101, 103' : mappingType === 'bsa_iea' ? 'e.g., 3, 5' : 'e.g., 154, 161'}
-                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E65AD] focus:border-[#1E65AD] bg-white"
-                      style={{ fontFamily: "'Heebo', sans-serif" }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "'Heebo', sans-serif" }}>
-                      {mappingType === 'bns_ipc' ? 'IPC Section' : mappingType === 'bsa_iea' ? 'IEA Section' : 'CrPC Section'}
-                    </label>
-                    <input
-                      type="text"
-                      value={filters.target_section}
-                      onChange={(e) => handleFilterChange('target_section', e.target.value)}
-                      placeholder={mappingType === 'bns_ipc' ? 'e.g., 302, 304' : mappingType === 'bsa_iea' ? 'e.g., 3, 5' : 'e.g., 154, 161'}
-                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E65AD] focus:border-[#1E65AD] bg-white"
-                      style={{ fontFamily: "'Heebo', sans-serif" }}
-                    />
-                  </div>
-                </div>
-
-                {/* Filter Actions */}
-                <div className="flex flex-col gap-2 pt-4 mt-4 border-t border-gray-200">
-                  <button
-                    onClick={() => {
-                      applyFilters();
-                      setMobileSidebarOpen(false);
-                    }}
-                    disabled={loading || isFetchingRef.current}
-                    className="w-full px-4 py-2 text-white rounded-lg font-semibold shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs transition-all"
-                    style={{ fontFamily: "'Heebo', sans-serif", backgroundColor: '#1E65AD' }}
-                  >
-                    {loading || isSearching ? (
-                      <>
-                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Searching...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        Apply Filters
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => {
-                      clearFilters();
-                      setMobileSidebarOpen(false);
-                    }}
-                    disabled={loading || isFetchingRef.current}
-                    className="w-full px-4 py-2 bg-white text-gray-700 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 font-semibold shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs transition-all"
-                    style={{ fontFamily: "'Heebo', sans-serif" }}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    Clear All
-                  </button>
-                </div>
-
-                {/* Active Filters Display */}
-                {Object.values(filters).some(val => val && (typeof val === 'string' ? val.trim() !== '' : val !== '')) && (
-                  <div className="mt-3 p-2 bg-[#E6F0F8] border border-[#B3D4ED] rounded-lg">
-                    <h3 className="text-xs font-medium mb-1.5" style={{ fontFamily: "'Heebo', sans-serif", color: '#1E65AD' }}>
-                      Active Filters:
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5">
-                      {Object.entries(filters).map(([key, value]) => {
-                        if (value && (typeof value === 'string' ? value.trim() !== '' : value !== '')) {
-                          const label = key === 'source_section' ? 'Source Section' : 
-                                       key === 'target_section' ? 'Target Section' :
-                                       key.charAt(0).toUpperCase() + key.slice(1);
-                          return (
-                            <span key={key} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-[#CCE0F0] text-[#1E65AD] break-words">
-                              {label}: "{value}"
-                            </span>
-                          );
-                        }
-                        return null;
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
-      
-      {/* LEFT: FIXED SIDEBAR - Desktop Only */}
+      {/* LEFT: FIXED SIDEBAR */}
       <aside 
-        className="hidden md:block fixed left-3 bottom-4 z-20 transition-all duration-300"
+        className="fixed left-3 bottom-4 z-20 transition-all duration-300"
         style={{ 
-          top: isScrolled ? '82px' : '320px',
+          top: isScrolled ? '64px' : '200px',
           width: '280px'
         }}
       >
@@ -1183,13 +859,13 @@ export default function LawMapping() {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 py-4 md:ml-[296px] pt-32 md:pt-4" style={{ position: 'relative', zIndex: 1 }}>
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4" style={{ marginLeft: '296px', position: 'relative', zIndex: 1 }}>
         
         {/* SCROLLABLE CONTENT AREA */}
         <div className="transition-all duration-300">
           
-          {/* SEARCH BAR - Desktop Only (Mobile search is in sticky header) */}
-          <div className="mb-4 hidden md:block">
+          {/* SEARCH BAR - Scrollable - Three search fields */}
+          <div className="mb-4">
             <div className="max-w-6xl mx-auto">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3" style={{ backgroundColor: '#FFFFFF' }}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1477,54 +1153,51 @@ export default function LawMapping() {
                         style={{ borderColor: '#E5E7EB' }}
                       >
                         {/* Card Content */}
-                        <div className="px-4 sm:px-5 md:px-6 py-4 sm:py-5">
+                        <div className="px-4 py-3">
                           {/* Title and Latest Tag */}
-                          <div className="mb-4 sm:mb-3">
-                            <div className="flex items-start justify-between gap-2 mb-2">
-                              <h3 
-                                className="text-base sm:text-sm md:text-base font-medium flex-1 line-clamp-2 group-hover:text-[#1A5490] transition-colors" 
-                                style={{ 
-                                  color: '#1E65AD', 
-                                  fontFamily: "'Heebo', sans-serif",
-                                  lineHeight: '1.4',
-                                  fontWeight: 500
-                                }}
-                                dangerouslySetInnerHTML={{
-                                  __html: (() => {
-                                    let highlight = mapping.highlights?.subject?.[0] || 
-                                                   mapping.highlights?.title?.[0] ||
-                                                   mapping.highlights?.searchable_text?.[0];
-                                    if (!highlight && searchMetadata?.highlights?.[mapping.id]) {
-                                      highlight = searchMetadata.highlights[mapping.id].subject?.[0] || 
-                                                 searchMetadata.highlights[mapping.id].title?.[0] ||
-                                                 searchMetadata.highlights[mapping.id].searchable_text?.[0];
-                                    }
-                                    if (highlight) {
-                                      return highlight;
-                                    }
-                                    return (subject || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                                  })()
-                                }}
-                              />
-                              {index === 0 && !loading && (
-                                <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold flex-shrink-0" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
-                                  Latest
-                                </span>
-                              )}
-                            </div>
+                          <div className="mb-3">
+                            <h3 
+                              className="text-sm md:text-base font-bold mb-1.5 line-clamp-2 group-hover:text-[#1A5490] transition-colors" 
+                              style={{ 
+                                color: '#1E65AD', 
+                                fontFamily: "'Bricolage Grotesque', sans-serif",
+                                lineHeight: '1.3'
+                              }}
+                              dangerouslySetInnerHTML={{
+                                __html: (() => {
+                                  let highlight = mapping.highlights?.subject?.[0] || 
+                                                 mapping.highlights?.title?.[0] ||
+                                                 mapping.highlights?.searchable_text?.[0];
+                                  if (!highlight && searchMetadata?.highlights?.[mapping.id]) {
+                                    highlight = searchMetadata.highlights[mapping.id].subject?.[0] || 
+                                               searchMetadata.highlights[mapping.id].title?.[0] ||
+                                               searchMetadata.highlights[mapping.id].searchable_text?.[0];
+                                  }
+                                  if (highlight) {
+                                    return highlight;
+                                  }
+                                  return (subject || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                })()
+                              }}
+                            />
+                            {index === 0 && !loading && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold mt-1.5" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                Latest
+                              </span>
+                            )}
                           </div>
 
                           {/* Section Mapping Display - Three Boxes Layout */}
-                          <div className="flex items-center justify-center gap-2 sm:gap-3 mb-4">
+                          <div className="flex items-center justify-center gap-3 mb-4">
                             {/* Source Section Box - Red */}
                             <div className="flex-1 bg-red-50 rounded-lg p-3 border border-red-200">
-                              <p className="text-xs text-gray-600 mb-2 text-center" style={{ fontFamily: "'Heebo', sans-serif" }}>
+                              <p className="text-xs text-gray-600 mb-2 text-center" style={{ fontFamily: 'Roboto, sans-serif' }}>
                                 {getSourceLabel()}
                               </p>
                               {sourceSection && (
                                 <div 
                                   className="text-2xl md:text-3xl font-bold text-center text-red-600"
-                                  style={{ fontFamily: "'Heebo', sans-serif" }}
+                                  style={{ fontFamily: 'Roboto, sans-serif' }}
                                   dangerouslySetInnerHTML={{
                                     __html: (() => {
                                       let highlight = null;
@@ -1556,20 +1229,20 @@ export default function LawMapping() {
                               <svg className="w-6 h-6" style={{ color: '#1E65AD' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                               </svg>
-                              <p className="text-xs text-gray-500" style={{ fontFamily: "'Heebo', sans-serif" }}>
+                              <p className="text-xs text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
                                 Maps to
                               </p>
                             </div>
 
                             {/* Target Section Box - Green */}
                             <div className="flex-1 bg-green-50 rounded-lg p-3 border border-green-200">
-                              <p className="text-xs text-gray-600 mb-2 text-center" style={{ fontFamily: "'Heebo', sans-serif" }}>
+                              <p className="text-xs text-gray-600 mb-2 text-center" style={{ fontFamily: 'Roboto, sans-serif' }}>
                                 {getTargetLabel()}
                               </p>
                               {targetSection && (
                                 <div 
                                   className="text-2xl md:text-3xl font-bold text-center text-green-600"
-                                  style={{ fontFamily: "'Heebo', sans-serif" }}
+                                  style={{ fontFamily: 'Roboto, sans-serif' }}
                                   dangerouslySetInnerHTML={{
                                     __html: (() => {
                                       let highlight = null;
@@ -1597,14 +1270,14 @@ export default function LawMapping() {
                             </div>
                           </div>
 
-                          {/* Description and View Details Button - Desktop */}
-                          <div className="hidden sm:flex items-start justify-between gap-4">
+                          {/* Description and View Details Button */}
+                          <div className="flex items-start justify-between gap-4">
                             {/* Description Text */}
                             {summary && (
                               <div className="flex-1">
                                 <p 
                                   className="text-sm text-gray-700 leading-relaxed" 
-                                  style={{ fontFamily: "'Heebo', sans-serif" }}
+                                  style={{ fontFamily: 'Roboto, sans-serif' }}
                                   dangerouslySetInnerHTML={{
                                     __html: (() => {
                                       let highlight = mapping.highlights?.summary?.[0] || 
@@ -1628,7 +1301,7 @@ export default function LawMapping() {
                               </div>
                             )}
 
-                            {/* View Details Button - Desktop Only */}
+                            {/* View Details Button */}
                             <div className="flex-shrink-0">
                               <button
                                 onClick={(e) => {
@@ -1639,7 +1312,7 @@ export default function LawMapping() {
                                 style={{ 
                                   backgroundColor: '#1E65AD',
                                   color: '#FFFFFF',
-                                  fontFamily: "'Heebo', sans-serif"
+                                  fontFamily: 'Roboto, sans-serif'
                                 }}
                               >
                                 <span>View Details</span>
@@ -1648,53 +1321,6 @@ export default function LawMapping() {
                                 </svg>
                               </button>
                             </div>
-                          </div>
-
-                          {/* Description - Mobile Only */}
-                          {summary && (
-                            <div className="sm:hidden mb-4">
-                              <p 
-                                className="text-sm text-gray-700 leading-relaxed" 
-                                style={{ fontFamily: "'Heebo', sans-serif" }}
-                                dangerouslySetInnerHTML={{
-                                  __html: (() => {
-                                    let highlight = mapping.highlights?.summary?.[0] || 
-                                                   mapping.highlights?.description?.[0] || 
-                                                   mapping.highlights?.source_description?.[0] ||
-                                                   mapping.highlights?.searchable_text?.[0];
-                                    if (!highlight && searchMetadata?.highlights?.[mapping.id]) {
-                                      const metaHighlights = searchMetadata.highlights[mapping.id];
-                                      highlight = metaHighlights.summary?.[0] || 
-                                                 metaHighlights.description?.[0] ||
-                                                 metaHighlights.source_description?.[0] ||
-                                                 metaHighlights.searchable_text?.[0];
-                                    }
-                                    if (highlight) {
-                                      return highlight;
-                                    }
-                                    return (summary || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                                  })()
-                                }}
-                              />
-                            </div>
-                          )}
-
-                          {/* View Details Button - Mobile Only (Full Width) */}
-                          <div className="sm:hidden mt-4 pt-4 border-t border-gray-200">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                viewMappingDetails(mapping);
-                              }}
-                              className="w-full px-4 py-3 bg-[#1E65AD] text-white rounded-lg hover:bg-[#1A5490] active:bg-[#164373] transition-colors font-semibold text-sm shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#1E65AD] focus:ring-offset-2 flex items-center justify-center gap-2"
-                              style={{ fontFamily: "'Heebo', sans-serif" }}
-                              aria-label="View mapping details"
-                            >
-                              <span>View Details</span>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </button>
                           </div>
                         </div>
                       </div>
