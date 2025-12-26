@@ -160,38 +160,19 @@ const BookmarkButton = ({
         
         // Debug logging for state acts
         if (type === 'state_act') {
-          console.log('🔍 Checking state act bookmark:', {
-            bookmarkType: bookmark.type,
-            expectedType: type,
-            itemId: item.id,
-            itemActId: item.act_id,
-            checkItemId,
-            checkItemIdString,
-            bookmarkItemId: bookmarkItem.id,
-            bookmarkItemIdString,
-            bookmarkActId,
-            idMatches,
-            typeMatches,
-            bookmarkItem: bookmarkItem
-          });
+          // Debug info removed for production
         }
         
         return idMatches && typeMatches;
       });
       
       if (existingBookmark) {
-        console.log('✅ Found existing bookmark for state act:', existingBookmark);
+        // ...removed console.log for production
         setIsBookmarked(true);
         setBookmarkId(existingBookmark.id);
       } else {
         if (type === 'state_act') {
-          console.log('⚠️ No existing bookmark found for state act:', {
-            itemId: item.id,
-            itemActId: item.act_id,
-            totalBookmarks: response.bookmarks?.length || 0,
-            stateActBookmarks: response.bookmarks?.filter(b => b.type === 'state_act').length || 0,
-            allStateActBookmarks: response.bookmarks?.filter(b => b.type === 'state_act')
-          });
+          // Debug info removed for production
         }
         setIsBookmarked(false);
         setBookmarkId(null);
@@ -270,7 +251,7 @@ const BookmarkButton = ({
     setIsLoading(true);
     setError(null);
     
-    console.log('🔖 BookmarkButton: Toggling bookmark', { type, itemId, item, isBookmarked, folderId });
+    // ...removed console.log for production
     
     try {
       let success = false;
@@ -289,7 +270,7 @@ const BookmarkButton = ({
             if (isNaN(centralActId)) {
               throw new Error('Invalid central act ID');
             }
-            console.log('🔖 Removing central act bookmark:', { id: centralActId, originalId: item.id, item });
+            // ...removed console.log for production
             await apiService.removeActBookmark('central', centralActId);
             message = 'Central act removed from bookmarks';
             break;
@@ -304,13 +285,7 @@ const BookmarkButton = ({
               console.error('❌ Invalid state act ID for removal:', { item, itemId: item.id, actId: item.act_id });
               throw new Error('Invalid state act ID. Expected numeric id or act_id field.');
             }
-            console.log('🔖 Removing state act bookmark:', { 
-              id: stateActId, 
-              originalId: item.id,
-              actId: item.act_id,
-              item,
-              actType: 'state'
-            });
+            // Debug info removed for production
             await apiService.removeActBookmark('state', stateActId);
             message = 'State act removed from bookmarks';
             break;
@@ -348,9 +323,9 @@ const BookmarkButton = ({
             if (isNaN(centralActIdAdd)) {
               throw new Error('Invalid central act ID');
             }
-            console.log('🔖 Adding central act bookmark:', { id: centralActIdAdd, originalId: item.id, item, folderId });
+            // ...removed console.log for production
             response = await apiService.bookmarkAct('central', centralActIdAdd, folderId);
-            console.log('🔖 Central act bookmark response:', response);
+            // ...removed console.log for production
             message = 'Central act added to bookmarks';
             break;
           case 'state_act':
@@ -364,20 +339,12 @@ const BookmarkButton = ({
               console.error('❌ Invalid state act ID for addition:', { item, itemId: item.id, actId: item.act_id });
               throw new Error('Invalid state act ID. Expected numeric id or act_id field.');
             }
-            console.log('🔖 Adding state act bookmark:', { 
-              id: stateActIdAdd, 
-              originalId: item.id,
-              actId: item.act_id,
-              item, 
-              folderId,
-              actType: 'state',
-              fullItem: JSON.stringify(item, null, 2)
-            });
+            // Debug info removed for production
             try {
               // API endpoint: POST /api/bookmarks/acts/state/{act_id}
               // Pass 'state' as actType (not 'state_act')
               response = await apiService.bookmarkAct('state', stateActIdAdd, folderId);
-              console.log('✅ State act bookmark response:', response);
+              // ...removed console.log for production
               message = 'State act added to bookmarks';
             } catch (bookmarkError) {
               console.error('❌ State act bookmark error:', bookmarkError);
@@ -414,7 +381,7 @@ const BookmarkButton = ({
         
         // After successful bookmark, re-check status to ensure UI is updated
         if (type === 'state_act') {
-          console.log('🔄 Re-checking bookmark status after successful bookmark...');
+          // ...removed console.log for production
           setTimeout(() => {
             checkBookmarkStatus();
           }, 500);
@@ -447,10 +414,10 @@ const BookmarkButton = ({
     const baseStyles = "flex items-center justify-center transition-all duration-200 font-medium rounded-lg shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2";
     
     // For icon-only buttons, use square padding and no width constraint
-    // Match share button sizing: p-1.5 sm:p-2
+    // Match share button sizing: p-1.5 sm:p-2, reduced for laptop screens
     if (!showText) {
       if (size === 'small') {
-        return `${baseStyles} p-1.5 sm:p-2`;
+        return `${baseStyles} p-1 sm:p-1.5`;
       } else if (size === 'large') {
         return `${baseStyles} p-3 sm:p-4`;
       } else {
@@ -469,8 +436,8 @@ const BookmarkButton = ({
   };
 
   const getIconSize = () => {
-    // Match share button icon sizing: h-4 w-4 sm:h-5 sm:w-5
-    if (size === 'small') return 'h-4 w-4 sm:h-5 sm:w-5';
+    // Match share button icon sizing: h-4 w-4 sm:h-5 sm:w-5, reduced for laptop screens
+    if (size === 'small') return 'h-3 w-3 sm:h-3.5 sm:w-3.5';
     if (size === 'large') return 'h-6 w-6 sm:h-7 sm:w-7';
     return 'h-5 w-5 sm:h-6 sm:w-6';
   };
