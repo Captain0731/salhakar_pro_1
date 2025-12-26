@@ -1,6 +1,6 @@
 // API Service for Legal Platform - Complete Integration
 // Primary server - ngrok tunnel
-const API_BASE_URL_AD = 'https://lionfish-app-y78xh.ondigitalocean.app';
+const API_BASE_URL_AD = '';
 
 // Server configuration with identifiers
 const API_SERVERS = [
