@@ -16,27 +16,11 @@ const useBodyScrollLock = (isLocked) => {
   }, [isLocked]);
 };
 
-// List of available icons from public/usericons
-const AVAILABLE_ICONS = [
-  '1000.jpeg',
-  '1001.jpeg',
-  '1002.jpeg',
-  '1003.jpeg',
-  '1004.jpeg',
-  '1005.jpeg',
-  '1006.jpeg',
-  '1007.jpeg',
-  '1008.jpeg',
-  '1009.jpeg',
-  '1010.jpeg',
-  '1011.jpeg',
-  '1012.jpeg',
-  '1013.jpeg',
-  '1014.jpeg',
-  
-];
+// DigitalOcean Spaces base URL for avatars
+const AVATAR_BASE_URL = 'https://storing.sfo3.digitaloceanspaces.com/profile';
 
-const DEFAULT_ICON = '1011.jpeg';
+// Default avatar ID
+const DEFAULT_AVATAR_ID = 1011;
 
 const UserIcon = ({ 
   size = 'md', 
@@ -44,13 +28,43 @@ const UserIcon = ({
   className = '',
   onClick = null 
 }) => {
-  const { user, updateProfile, login } = useAuth();
+  const { user, login } = useAuth();
   const [showIconModal, setShowIconModal] = useState(false);
-  const [selectedIcon, setSelectedIcon] = useState(null);
+  const [selectedAvatarId, setSelectedAvatarId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [availableAvatars, setAvailableAvatars] = useState([]);
+  const [loadingAvatars, setLoadingAvatars] = useState(false);
 
   // Lock body scroll when modal is open
   useBodyScrollLock(showIconModal);
+
+  // Fetch available avatars from API
+  const fetchAvatars = async () => {
+    setLoadingAvatars(true);
+    try {
+      const response = await apiService.listAvatars();
+      if (response && response.avatars && Array.isArray(response.avatars)) {
+        setAvailableAvatars(response.avatars);
+      } else {
+        // Fallback: generate default range if API fails
+        setAvailableAvatars(Array.from({ length: 15 }, (_, i) => 1000 + i));
+      }
+    } catch (error) {
+      console.error('Error fetching avatars:', error);
+      // Fallback: generate default range
+      setAvailableAvatars(Array.from({ length: 15 }, (_, i) => 1000 + i));
+    } finally {
+      setLoadingAvatars(false);
+    }
+  };
+
+  // Fetch available avatars when modal opens
+  useEffect(() => {
+    if (showIconModal && availableAvatars.length === 0) {
+      fetchAvatars();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showIconModal]);
 
   // Close modal on ESC key
   useEffect(() => {
@@ -65,12 +79,10 @@ const UserIcon = ({
     }
   }, [showIconModal]);
 
-  // Get current user icon or default
-  const getUserIcon = () => {
-    if (user?.avatar) {
-      return `/usericons/${user.avatar}`;
-    }
-    return `/usericons/${DEFAULT_ICON}`;
+  // Get current user avatar URL or default
+  const getUserAvatarUrl = () => {
+    const avatarId = user?.avatar_id || DEFAULT_AVATAR_ID;
+    return `${AVATAR_BASE_URL}/${avatarId}.jpeg`;
   };
 
   // Size classes
@@ -91,43 +103,43 @@ const UserIcon = ({
     }
   };
 
-  const handleIconSelect = async (iconName) => {
-    setSelectedIcon(iconName);
+  const handleAvatarSelect = async (avatarId) => {
+    // Validate avatar ID range
+    if (avatarId < 1000 || avatarId > 1014) {
+      alert('Invalid avatar ID. Please select a valid avatar.');
+      return;
+    }
+
+    setSelectedAvatarId(avatarId);
     setLoading(true);
     
-    let updateSuccess = false;
-    
     try {
-      // Try to update via API first
-      try {
-        await updateProfile({ avatar: iconName });
-        console.log('Icon updated successfully via API');
-        updateSuccess = true;
-      } catch (apiError) {
-        console.warn('API update failed, updating locally:', apiError);
-        // Fallback: Update locally if API fails
-        if (user && login) {
-          const updatedUser = { ...user, avatar: iconName };
-          // Update localStorage
-          localStorage.setItem('user', JSON.stringify(updatedUser));
-          // Update context by calling login with updated user (this updates the context)
-          login(updatedUser);
-          updateSuccess = true;
-          console.log('Icon updated successfully (local storage)');
-        } else {
-          throw new Error('Unable to update icon: user data or login function not available');
-        }
-      }
+      // Call API to set avatar
+      const response = await apiService.setAvatar(avatarId);
       
-      if (updateSuccess) {
+      if (response && response.avatar_id) {
+        // Update user data with new avatar_id
+        const updatedUser = {
+          ...user,
+          avatar_id: response.avatar_id
+        };
+        
+        // Update localStorage
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        
+        // Update context
+        login(updatedUser);
+        
         setShowIconModal(false);
-        // Optionally show a success toast/notification here instead of alert
-        console.log('Icon updated successfully');
+        console.log('Avatar updated successfully');
+      } else {
+        throw new Error('Invalid response from server');
       }
     } catch (error) {
-      console.error('Error updating icon:', error);
-      setSelectedIcon(null); // Reset selection on error
-      alert('Failed to update icon. Please try again.');
+      console.error('Error updating avatar:', error);
+      setSelectedAvatarId(null);
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to update avatar. Please try again.';
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -143,12 +155,12 @@ const UserIcon = ({
         }}
       >
         <img
-          src={getUserIcon()}
-          alt="User"
+          src={getUserAvatarUrl()}
+          alt="User Avatar"
           className="w-full h-full object-cover"
           onError={(e) => {
-            // Fallback to default icon if image fails to load
-            e.target.src = `/usericons/${DEFAULT_ICON}`;
+            // Fallback to default avatar if image fails to load
+            e.target.src = `${AVATAR_BASE_URL}/${DEFAULT_AVATAR_ID}.jpeg`;
           }}
         />
       </div>
@@ -193,41 +205,56 @@ const UserIcon = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
-                {AVAILABLE_ICONS.map((iconName) => {
-                  const isSelected = selectedIcon === iconName || (!selectedIcon && user?.avatar === iconName) || (!selectedIcon && !user?.avatar && iconName === DEFAULT_ICON);
-                  return (
-                    <div
-                      key={iconName}
-                      onClick={() => !loading && handleIconSelect(iconName)}
-                      className={`relative p-2 rounded-lg cursor-pointer transition-all ${
-                        isSelected
-                          ? 'ring-2 ring-blue-500 bg-blue-50'
-                          : 'hover:bg-gray-100'
-                      } ${loading ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
-                    >
-                      <div className="aspect-square rounded-full overflow-hidden bg-gray-200 border-2 border-transparent hover:border-gray-300 transition-colors">
-                        <img
-                          src={`/usericons/${iconName}`}
-                          alt={iconName}
-                          className="w-full h-full object-cover"
-                          draggable="false"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
-                      </div>
-                      {isSelected && (
-                        <div className="absolute top-1 right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
+              {loadingAvatars ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    <p className="mt-2 text-gray-600">Loading avatars...</p>
+                  </div>
+                </div>
+              ) : availableAvatars.length === 0 ? (
+                <div className="text-center py-12 text-gray-600">
+                  <p>No avatars available. Please try again later.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+                  {availableAvatars.map((avatarId) => {
+                    const isSelected = selectedAvatarId === avatarId || 
+                                     (!selectedAvatarId && user?.avatar_id === avatarId) || 
+                                     (!selectedAvatarId && !user?.avatar_id && avatarId === DEFAULT_AVATAR_ID);
+                    return (
+                      <div
+                        key={avatarId}
+                        onClick={() => !loading && handleAvatarSelect(avatarId)}
+                        className={`relative p-2 rounded-lg cursor-pointer transition-all ${
+                          isSelected
+                            ? 'ring-2 ring-blue-500 bg-blue-50'
+                            : 'hover:bg-gray-100'
+                        } ${loading ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                      >
+                        <div className="aspect-square rounded-full overflow-hidden bg-gray-200 border-2 border-transparent hover:border-gray-300 transition-colors">
+                          <img
+                            src={`${AVATAR_BASE_URL}/${avatarId}.jpeg`}
+                            alt={`Avatar ${avatarId}`}
+                            className="w-full h-full object-cover"
+                            draggable="false"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
+                          />
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        {isSelected && (
+                          <div className="absolute top-1 right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {loading && (
                 <div className="mt-4 text-center text-gray-600">
