@@ -13,12 +13,12 @@ export default function LegalTemplate() {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [showTemplateDetails, setShowTemplateDetails] = useState(false);
 
-  // Fast scroll to top on route change
-  useLayoutEffect(() => {
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [location.pathname]);
+  // DISABLED: Auto-scroll to top on route change
+  // useLayoutEffect(() => {
+  //   window.scrollTo(0, 0);
+  //   document.documentElement.scrollTop = 0;
+  //   document.body.scrollTop = 0;
+  // }, [location.pathname]);
 
 
   const categories = [

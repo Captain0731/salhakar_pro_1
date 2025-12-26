@@ -13,12 +13,12 @@ export default function YoutubeVideoSummary() {
   const [summary, setSummary] = useState(null);
   const [videoInfo, setVideoInfo] = useState(null);
 
-  // Fast scroll to top on route change
-  useLayoutEffect(() => {
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [location.pathname]);
+  // DISABLED: Auto-scroll to top on route change
+  // useLayoutEffect(() => {
+  //   window.scrollTo(0, 0);
+  //   document.documentElement.scrollTop = 0;
+  //   document.body.scrollTop = 0;
+  // }, [location.pathname]);
 
 
   const extractVideoId = (url) => {

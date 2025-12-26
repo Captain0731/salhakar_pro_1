@@ -9,9 +9,11 @@ import {
   SquareStack, Lightbulb, Settings, Share2, Shuffle, Square,
   Plus, FolderOpen, MessageSquare, ChevronLeft, Menu, Trash2
 } from "lucide-react";
+// Performance: Keep framer-motion only for complex animations (modals, sidebars)
+// Simple list animations replaced with CSS for better TBT
 import { motion, AnimatePresence } from "framer-motion";
-import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import ReactMarkdown from "react-markdown";
 import apiService from "../services/api";
 import ChatFeedbackButton from "../components/ChatFeedbackButton";
 
@@ -633,53 +635,29 @@ export default function LegalChatbot() {
     setIsTyping(true);
 
     try {
-      // Create a File object from the blob
-      const audioFile = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
-      
-      // Call the Speech API
-      const response = await apiService.speechToGemini(audioFile);
+      const audioFile = new File([audioBlob], "recording.webm", { type: "audio/webm" });
+      const transcription = await apiService.transcribeAudio(audioFile);
+      const transcriptText = transcription?.text?.trim();
 
-      // Note: The new API doesn't return transcription separately
-      // The transcription is handled internally and only the AI reply is returned
-      // We'll show a placeholder message for voice input
-      const userMessage = {
-        id: Date.now(),
-        text: "[Voice message]",
-        sender: "user",
-        timestamp: new Date().toISOString(),
-        isVoice: true
-      };
-      setMessages(prev => [...prev, userMessage]);
-      setTimeout(() => scrollToBottom(), 50);
-
-      // Save session_id if provided in response (if voice API supports it)
-      if (response.session_id) {
-        setCurrentSessionId(response.session_id);
-        localStorage.setItem('currentChatSessionId', response.session_id.toString());
+      if (!transcriptText) {
+        throw new Error("No speech detected. Please try again.");
       }
 
-      // Add bot response
-      const botResponse = {
-        id: Date.now() + 1,
-        text: response.reply || "I'm sorry, I couldn't process your voice input. Please try again.",
-        sender: "bot",
-        timestamp: new Date().toISOString(),
-        usedTools: response.used_tools || false,
-        toolUsed: response.tool_used || null,
-        searchInfo: response.search_info || null,
-        sessionId: response.session_id || currentSessionId
-      };
-      setMessages(prev => [...prev, botResponse]);
-      setTimeout(() => scrollToBottom(), 100);
+      setInputMessage(prev => prev ? `${prev} ${transcriptText}` : transcriptText);
+      setTimeout(() => {
+        adjustTextareaHeight();
+        inputRef.current?.focus();
+      }, 0);
     } catch (error) {
-      console.error('Error processing voice input:', error);
+      console.error("Error processing voice input:", error);
       const errorResponse = {
         id: Date.now() + 1,
-        text: "I'm sorry, there was an error processing your voice input. Please try again.",
+        text: error.message || "I'm sorry, there was an error transcribing your voice input. Please try again.",
         sender: "bot",
         timestamp: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorResponse]);
+      setTimeout(() => scrollToBottom(), 100);
     } finally {
       setIsProcessingVoice(false);
       setIsTyping(false);
@@ -700,53 +678,31 @@ export default function LegalChatbot() {
     setIsTyping(true);
 
     try {
-      const response = await apiService.speechToGemini(file);
+      const transcription = await apiService.transcribeAudio(file);
+      const transcriptText = transcription?.text?.trim();
 
-      // Note: The new API doesn't return transcription separately
-      // The transcription is handled internally and only the AI reply is returned
-      // We'll show a placeholder message for uploaded audio
-      const userMessage = {
-        id: Date.now(),
-        text: "[Audio file uploaded]",
-        sender: "user",
-        timestamp: new Date().toISOString(),
-        isVoice: true
-      };
-      setMessages(prev => [...prev, userMessage]);
-      setTimeout(() => scrollToBottom(), 50);
-
-      // Save session_id if provided in response
-      if (response.session_id) {
-        setCurrentSessionId(response.session_id);
-        localStorage.setItem('currentChatSessionId', response.session_id.toString());
+      if (!transcriptText) {
+        throw new Error("No speech detected. Please try again.");
       }
 
-      // Add bot response
-      const botResponse = {
-        id: Date.now() + 1,
-        text: response.reply || "I'm sorry, I couldn't process your audio file. Please try again.",
-        sender: "bot",
-        timestamp: new Date().toISOString(),
-        usedTools: response.used_tools || false,
-        toolUsed: response.tool_used || null,
-        searchInfo: response.search_info || null,
-        sessionId: response.session_id || currentSessionId
-      };
-      setMessages(prev => [...prev, botResponse]);
-      setTimeout(() => scrollToBottom(), 100);
+      setInputMessage(prev => prev ? `${prev} ${transcriptText}` : transcriptText);
+      setTimeout(() => {
+        adjustTextareaHeight();
+        inputRef.current?.focus();
+      }, 0);
     } catch (error) {
-      console.error('Error processing audio file:', error);
+      console.error("Error processing audio file:", error);
       const errorResponse = {
         id: Date.now() + 1,
-        text: "I'm sorry, there was an error processing your audio file. Please try again.",
+        text: error.message || "I'm sorry, there was an error transcribing your audio file. Please try again.",
         sender: "bot",
         timestamp: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorResponse]);
+      setTimeout(() => scrollToBottom(), 100);
     } finally {
       setIsProcessingVoice(false);
       setIsTyping(false);
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -1011,6 +967,26 @@ export default function LegalChatbot() {
   return (
     <div className="h-screen flex flex-col overflow-hidden overflow-x-hidden" style={{ backgroundColor: '#F9FAFC', scrollBehavior: 'smooth' }}>
       <style>{`
+        /* Performance: CSS-based message animations (replaces framer-motion for better TBT) */
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(15px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        /* Respect prefers-reduced-motion for accessibility and performance */
+        @media (prefers-reduced-motion: reduce) {
+          .message-fade-in {
+            animation: none !important;
+            opacity: 1 !important;
+          }
+        }
+        
         .user-message-text::selection {
           background-color: rgba(255, 255, 255, 0.5);
           color: #FFFFFF;
@@ -1541,15 +1517,17 @@ export default function LegalChatbot() {
                     WebkitOverflowScrolling: 'touch'
                   }}
                 >
-                  <AnimatePresence>
+                  {/* Performance: Replace framer-motion list animations with CSS for better TBT */}
+                  {/* Using CSS animations instead of JS-based motion for list items */}
                     {messages.map((message, index) => (
-                      <motion.div
+                      <div
                       key={message.id}
-                        initial={{ opacity: 0, y: 15 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.4, delay: index * 0.05 }}
-                      className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                      className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} message-fade-in`}
+                      style={{
+                        animation: 'fadeInUp 0.4s ease-out forwards',
+                        animationDelay: `${index * 0.05}s`,
+                        opacity: 0
+                      }}
                       >
                 {message.sender === 'user' ? (
                           /* User Message - Brand Blue Bubble */
@@ -1583,13 +1561,17 @@ export default function LegalChatbot() {
                           /* AI Response - Simple Bubble */
                           <div className="max-w-[90%] sm:max-w-[80%] md:max-w-[70%]">
                             <div className="flex items-start gap-2">
-                              {/* Bot Avatar */}
+                              {/* Bot Avatar - lightweight CSS avatar instead of heavy GIF */}
                               <div className="flex-shrink-0 mt-1">
-                                <img 
-                                  src="/uit3.GIF" 
-                                  alt="AI Assistant" 
-                                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-contain"
-                                />
+                                <div
+                                  aria-hidden="true"
+                                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-semibold text-white shadow-md"
+                                  style={{
+                                    background: 'linear-gradient(135deg, #1E65AD 0%, #2A7BC8 50%, #CF9B63 100%)'
+                                  }}
+                                >
+                                  AI
+                                </div>
                               </div>
                             <div 
                                 className="rounded-xl sm:rounded-2xl px-4 py-3 sm:px-5 sm:py-4 flex-1"
@@ -1753,9 +1735,8 @@ export default function LegalChatbot() {
                       )}
                     </div>
                 )}
-                      </motion.div>
+                      </div>
                     ))}
-                  </AnimatePresence>
                   
                    {/* Typing Indicator */}
                    {isTyping && (

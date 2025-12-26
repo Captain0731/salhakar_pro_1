@@ -43,37 +43,39 @@ const Footer = lazy(() => import("./components/landing/Footer"));
 const CookieConsentPopup = lazy(() => import("./components/CookieConsentPopup"));
 
 // ScrollToTop component to reset scroll position on route change with smooth behavior
+// DISABLED: Auto-scroll to top on route change
 function ScrollToTop() {
   const { pathname } = useLocation();
 
   useEffect(() => {
+    // DISABLED: Auto-scroll behavior removed - pages will maintain scroll position
     // Smooth scroll window to top
-    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    // window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
     
     // Also reset any scroll containers with smooth behavior
-    const scrollContainers = [
-      document.getElementById('main-scroll-area'),
-      document.getElementById('chatbot-scroll-area'),
-      document.querySelector('[data-scroll-container]')
-    ];
+    // const scrollContainers = [
+    //   document.getElementById('main-scroll-area'),
+    //   document.getElementById('chatbot-scroll-area'),
+    //   document.querySelector('[data-scroll-container]')
+    // ];
     
-    scrollContainers.forEach(container => {
-      if (container) {
-        container.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-      }
-    });
+    // scrollContainers.forEach(container => {
+    //   if (container) {
+    //     container.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    //   }
+    // });
     
     // Also reset document element scroll smoothly
-    const smoothScrollToTop = () => {
-      const currentScroll = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop;
-      if (currentScroll > 0) {
-        window.requestAnimationFrame(smoothScrollToTop);
-        window.scrollTo(0, currentScroll - (currentScroll / 8));
-      }
-    };
+    // const smoothScrollToTop = () => {
+    //   const currentScroll = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop;
+    //   if (currentScroll > 0) {
+    //     window.requestAnimationFrame(smoothScrollToTop);
+    //     window.scrollTo(0, currentScroll - (currentScroll / 8));
+    //   }
+    // };
     
     // Use smooth scroll animation
-    smoothScrollToTop();
+    // smoothScrollToTop();
   }, [pathname]);
 
   return null;

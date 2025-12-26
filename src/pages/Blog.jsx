@@ -11,13 +11,13 @@ const Blog = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  // Scroll to top immediately when component mounts or route changes (before paint)
-  useLayoutEffect(() => {
-    // Force scroll to top immediately (synchronous, no animation)
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [location.pathname]);
+  // DISABLED: Auto-scroll to top on route change
+  // useLayoutEffect(() => {
+  //   // Force scroll to top immediately (synchronous, no animation)
+  //   window.scrollTo(0, 0);
+  //   document.documentElement.scrollTop = 0;
+  //   document.body.scrollTop = 0;
+  // }, [location.pathname]);
 
   const categories = ["All", "Legal Updates", "AI & Technology", "Case Studies", "Legal Tips", "Industry News"];
 

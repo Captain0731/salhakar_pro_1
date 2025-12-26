@@ -8,12 +8,12 @@ const BlogPost = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // Scroll to top when component mounts or id changes
-  useLayoutEffect(() => {
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, [id]);
+  // DISABLED: Auto-scroll to top on route change
+  // useLayoutEffect(() => {
+  //   window.scrollTo(0, 0);
+  //   document.documentElement.scrollTop = 0;
+  //   document.body.scrollTop = 0;
+  // }, [id]);
 
   // Sample blog posts data (in a real app, this would come from an API)
   const blogPosts = {
