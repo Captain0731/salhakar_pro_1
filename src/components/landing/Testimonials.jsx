@@ -229,7 +229,7 @@ const Testimonials = () => {
                       boxShadow: isCenter 
                         ? '0 25px 50px -12px rgba(30, 101, 173, 0.25)' 
                         : '0 10px 25px -10px rgba(0, 0, 0, 0.1)',
-                      border: isCenter ? '2px solid #1E65AD' : '1px solid #E5E7EB',
+                      // border: isCenter ? '2px solid #1E65AD' : '1px solid #E5E7EB',
                       padding: 'clamp(1.25rem, 2.5vw, 1.75rem)',
                       borderRadius: 'clamp(1rem, 2vw, 1.5rem)'
                     }}

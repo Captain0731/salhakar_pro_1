@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Bookmark, 
-  Folder, 
-  FolderPlus, 
-  FileText, 
-  MoreVertical, 
-  Search, 
-  Filter, 
-  Grid, 
-  List, 
-  Eye, 
-  Trash2, 
+import {
+  Bookmark,
+  Folder,
+  FolderPlus,
+  FileText,
+  MoreVertical,
+  Search,
+  Filter,
+  Grid,
+  List,
+  Eye,
+  Trash2,
   Edit3,
   Share2,
   Download,
@@ -114,7 +114,7 @@ const Bookmarks = ({ onBack }) => {
     // Fallback for unknown types
     return item.title || item.subject || item.short_title || item.long_title || 'Untitled';
   };
-  
+
   // Advanced filtering states
   const [advancedFilters, setAdvancedFilters] = useState({
     dateRange: {
@@ -134,15 +134,15 @@ const Bookmarks = ({ onBack }) => {
   const handleViewBookmark = async (bookmark) => {
     const item = bookmark.item || bookmark;
     const bookmarkType = bookmark.type;
-    
+
     // Extract item ID - handle various possible structures
     let itemId = item.id || item.judgement_id || item.act_id || item.mapping_id || bookmark.item_id;
-    
+
     // If itemId is still not found, try to extract from bookmark structure
     if (!itemId && bookmark.item_id) {
       itemId = bookmark.item_id;
     }
-    
+
     // If still no ID, log warning and try to proceed with what we have
     if (!itemId) {
       console.warn('⚠️ No item ID found in bookmark:', bookmark);
@@ -160,18 +160,18 @@ const Bookmarks = ({ onBack }) => {
           try {
             console.log('🔍 Fetching judgment details for ID:', itemId);
             console.log('🔍 Current item data:', item);
-            
+
             // Fetch full judgment details from API
             const response = await apiService.getJudgementById(itemId);
             console.log('📥 API Response:', response);
-            
+
             // Handle various response structures:
             // 1. Direct judgment object: { id, title, pdf_url, ... }
             // 2. Wrapped in data: { data: { id, title, pdf_url, ... } }
             // 3. Wrapped in judgment: { judgment: { id, title, pdf_url, ... } }
             // 4. Array: [{ id, title, pdf_url, ... }]
             let judgmentData = null;
-            
+
             if (response) {
               if (Array.isArray(response)) {
                 judgmentData = response[0]; // Take first item if array
@@ -183,15 +183,15 @@ const Bookmarks = ({ onBack }) => {
                 judgmentData = response; // Direct judgment object
               }
             }
-            
+
             // If still no data, use item as fallback
             if (!judgmentData) {
               console.warn('⚠️ No judgment data from API, using item data');
               judgmentData = item;
             }
-            
+
             console.log('✅ Extracted judgment data:', judgmentData);
-            
+
             // Merge with item data to ensure all fields are present
             // Priority: API data > item data > empty defaults
             const completeJudgment = {
@@ -213,13 +213,19 @@ const Bookmarks = ({ onBack }) => {
               summary: judgmentData.summary || item.summary || '',
               citation: judgmentData.citation || item.citation || ''
             };
-            
+
             console.log('✅ Complete judgment data to navigate:', completeJudgment);
-            
+
             // Navigate to PDF view with complete judgment data
+            // Determine court type from judgment data
+            const courtType = completeJudgment.court_name?.toLowerCase().includes('supreme') ||
+                              completeJudgment.court?.toLowerCase().includes('supreme')
+              ? 'supreme-court'
+              : 'high-court';
+            
             const judgmentId = completeJudgment.id || completeJudgment.cnr;
-            const url = judgmentId ? `/judgment/${judgmentId}` : '/judgment';
-            navigate(url, { state: { judgment: completeJudgment } });
+            const url = judgmentId ? `/judgment/${courtType}/${judgmentId}` : '/judgment';
+            navigate(url, { state: { judgment: completeJudgment, courtType } });
           } catch (err) {
             console.error('❌ Error fetching judgment:', err);
             // Fallback: use item data if available
@@ -231,34 +237,41 @@ const Bookmarks = ({ onBack }) => {
                 pdf_link: item.pdf_link || item.pdf_url || "",
                 pdf_url: item.pdf_url || item.pdf_link || ""
               };
+              
+              // Determine court type
+              const courtType = fallbackJudgment.court_name?.toLowerCase().includes('supreme') ||
+                                fallbackJudgment.court?.toLowerCase().includes('supreme')
+                ? 'supreme-court'
+                : 'high-court';
+              
               const judgmentId = fallbackJudgment.id || fallbackJudgment.cnr;
-              const url = judgmentId ? `/judgment/${judgmentId}` : '/judgment';
-              navigate(url, { state: { judgment: fallbackJudgment } });
+              const url = judgmentId ? `/judgment/${courtType}/${judgmentId}` : '/judgment';
+              navigate(url, { state: { judgment: fallbackJudgment, courtType } });
             } else {
               setError(`Failed to load judgment: ${err.message || 'Unknown error'}`);
               throw err;
             }
           }
           break;
-        
+
         case 'central_act':
           // Navigate to act details page using ID
           try {
             const actData = await apiService.getCentralActById(itemId);
             const actId = actData.id || actData.act_id || itemId;
-            navigate(`/acts/${actId}`);
+            navigate(`/acts/central/${actId}`, { state: { act: actData, isStateAct: false, section: 'central' } });
           } catch (err) {
             console.error('Error fetching central act:', err);
             // Fallback: use item ID if available
             const fallbackId = item.id || item.act_id || itemId;
             if (fallbackId) {
-              navigate(`/acts/${fallbackId}`);
+              navigate(`/acts/central/${fallbackId}`);
             } else {
               throw new Error('Failed to load central act details');
             }
           }
           break;
-        
+
         case 'state_act':
           // Navigate to act details page using ID
           try {
@@ -266,46 +279,56 @@ const Bookmarks = ({ onBack }) => {
             const actData = await apiService.getStateActById(itemId);
             console.log('✅ State act fetched successfully:', actData);
             const actId = actData.id || actData.act_id || itemId;
-            navigate(`/acts/${actId}`);
+            navigate(`/acts/state/${actId}`, { state: { act: actData, isStateAct: true, section: 'state' } });
           } catch (err) {
             console.error('❌ Error fetching state act:', err);
             console.error('❌ Error details:', err.message, err.stack);
             // Fallback: use item ID if available
             const fallbackId = item.id || item.act_id || itemId;
             if (fallbackId) {
-              navigate(`/acts/${fallbackId}`);
+              navigate(`/acts/state/${fallbackId}`);
             } else {
               throw new Error(`Failed to load state act details: ${err.message}`);
             }
           }
           break;
-        
+
         case 'bsa_iea_mapping':
-          // Fetch full mapping details and navigate to mapping details page
+          // Navigate to mapping details page using ID in URL
           try {
-            const mappingData = await apiService.getLawMappingById(itemId, 'bsa_iea');
-            navigate('/mapping-details', { state: { mapping: mappingData } });
-          } catch (err) {
-            console.error('Error fetching BSA-IEA mapping:', err);
-            // Fallback: use item data if available
-            if (item.bsa_section || item.iea_section || item.subject) {
+            const mappingId = item.id || item.mapping_id || itemId;
+            if (mappingId) {
+              navigate(`/mapping-details?id=${mappingId}&mapping_type=bsa_iea`);
+            } else {
+              // Fallback: use state if no ID
               navigate('/mapping-details', { state: { mapping: item } });
+            }
+          } catch (err) {
+            console.error('Error navigating to BSA-IEA mapping:', err);
+            const mappingId = item.id || item.mapping_id || itemId;
+            if (mappingId) {
+              navigate(`/mapping-details?id=${mappingId}&mapping_type=bsa_iea`);
             } else {
               throw new Error('Failed to load BSA-IEA mapping details');
             }
           }
           break;
-        
+
         case 'bns_ipc_mapping':
-          // Fetch full mapping details and navigate to mapping details page
+          // Navigate to mapping details page using ID in URL
           try {
-            const mappingData = await apiService.getLawMappingById(itemId, 'bns_ipc');
-            navigate('/mapping-details', { state: { mapping: mappingData } });
-          } catch (err) {
-            console.error('Error fetching BNS-IPC mapping:', err);
-            // Fallback: use item data if available
-            if (item.bns_section || item.ipc_section || item.subject) {
+            const mappingId = item.id || item.mapping_id || itemId;
+            if (mappingId) {
+              navigate(`/mapping-details?id=${mappingId}&mapping_type=bns_ipc`);
+            } else {
+              // Fallback: use state if no ID
               navigate('/mapping-details', { state: { mapping: item } });
+            }
+          } catch (err) {
+            console.error('Error navigating to BNS-IPC mapping:', err);
+            const mappingId = item.id || item.mapping_id || itemId;
+            if (mappingId) {
+              navigate(`/mapping-details?id=${mappingId}&mapping_type=bns_ipc`);
             } else {
               throw new Error('Failed to load BNS-IPC mapping details');
             }
@@ -313,21 +336,26 @@ const Bookmarks = ({ onBack }) => {
           break;
 
         case 'bnss_crpc_mapping':
-          // Fetch full mapping details and navigate to mapping details page
+          // Navigate to mapping details page using ID in URL
           try {
-            const mappingData = await apiService.getLawMappingById(itemId, 'bnss_crpc');
-            navigate('/mapping-details', { state: { mapping: mappingData } });
-          } catch (err) {
-            console.error('Error fetching BNSS-CrPC mapping:', err);
-            // Fallback: use item data if available
-            if (item.bnss_section || item.crpc_section || item.subject) {
+            const mappingId = item.id || item.mapping_id || itemId;
+            if (mappingId) {
+              navigate(`/mapping-details?id=${mappingId}&mapping_type=bnss_crpc`);
+            } else {
+              // Fallback: use state if no ID
               navigate('/mapping-details', { state: { mapping: item } });
+            }
+          } catch (err) {
+            console.error('Error navigating to BNSS-CrPC mapping:', err);
+            const mappingId = item.id || item.mapping_id || itemId;
+            if (mappingId) {
+              navigate(`/mapping-details?id=${mappingId}&mapping_type=bnss_crpc`);
             } else {
               throw new Error('Failed to load BNSS-CrPC mapping details');
             }
           }
           break;
-        
+
         default:
           console.warn('Unknown bookmark type:', bookmarkType);
           setError(`Unknown bookmark type: ${bookmarkType}`);
@@ -410,7 +438,7 @@ const Bookmarks = ({ onBack }) => {
   const handleTagFilterChange = (tag) => {
     setAdvancedFilters(prev => ({
       ...prev,
-      tags: prev.tags.includes(tag) 
+      tags: prev.tags.includes(tag)
         ? prev.tags.filter(t => t !== tag)
         : [...prev.tags, tag]
     }));
@@ -441,13 +469,13 @@ const Bookmarks = ({ onBack }) => {
   const loadBookmarks = useCallback(async (offset = 0, limit = 50) => {
     setLoading(true);
     setError(null);
-    
+
     // FIX: Clear bookmarks immediately when starting a new load (offset === 0)
     // This prevents showing stale data while new data is loading
     if (offset === 0) {
       setBookmarks([]);
     }
-    
+
     try {
       // Build filter parameters based on current filters
       const filterParams = {
@@ -466,7 +494,7 @@ const Bookmarks = ({ onBack }) => {
       };
 
       const response = await apiService.getUserBookmarks(filterParams);
-      
+
       // Debug: Log response to understand structure
       console.log('📋 Bookmark API Response:', response);
       console.log('📋 Bookmarks received:', response.bookmarks?.length || 0);
@@ -476,7 +504,7 @@ const Bookmarks = ({ onBack }) => {
           typeCounts[b.type] = (typeCounts[b.type] || 0) + 1;
         });
         console.log('📋 Bookmark types distribution:', typeCounts);
-        
+
         // Debug state acts specifically
         const stateActs = response.bookmarks.filter(b => b.type === 'state_act');
         if (stateActs.length > 0) {
@@ -486,7 +514,7 @@ const Bookmarks = ({ onBack }) => {
           console.log('⚠️ No state acts found in response');
         }
       }
-      
+
       // FIX: Always replace bookmarks when offset is 0 (new folder/filter)
       // Only append when offset > 0 (pagination/load more)
       if (offset === 0) {
@@ -496,7 +524,7 @@ const Bookmarks = ({ onBack }) => {
         // Append only for pagination (load more)
         setBookmarks(prev => [...prev, ...(response.bookmarks || [])]);
       }
-      
+
       setPagination({
         limit: response.pagination?.limit || limit,
         offset: response.pagination?.offset || offset,
@@ -527,7 +555,7 @@ const Bookmarks = ({ onBack }) => {
   const sortedBookmarks = [...filteredBookmarks].sort((a, b) => {
     const itemA = a.item || a;
     const itemB = b.item || b;
-    
+
     switch (sortBy) {
       case 'name':
         return getBookmarkTitle(a).localeCompare(getBookmarkTitle(b));
@@ -549,7 +577,7 @@ const Bookmarks = ({ onBack }) => {
       setShowCreateFolder(false);
       return;
     }
-    
+
     try {
       await apiService.createBookmarkFolder(newFolderName.trim());
       setNewFolderName('');
@@ -575,22 +603,22 @@ const Bookmarks = ({ onBack }) => {
 
   const confirmDeleteFolder = async () => {
     if (!deleteItem || deleteType !== 'folder') return;
-    
+
     try {
       setDeleting(true);
       await apiService.deleteBookmarkFolder(deleteItem.id);
-      
+
       // Remove folder from state
       setFolders(prev => prev.filter(f => f.id !== deleteItem.id));
-      
+
       // If this folder was selected, clear the selection
       if (currentFolder?.id === deleteItem.id) {
         setCurrentFolder(null);
       }
-      
+
       // Reload bookmarks to reflect the change (bookmarks will now be unfiled)
       await loadBookmarks();
-      
+
       // Close modal
       setShowDeleteConfirm(false);
       setDeleteItem(null);
@@ -610,7 +638,7 @@ const Bookmarks = ({ onBack }) => {
   const handleDeleteBookmark = async (bookmark) => {
     const bookmarkId = typeof bookmark === 'object' ? bookmark.id : bookmark;
     const bookmarkTitle = getBookmarkTitle(bookmark);
-    
+
     setDeleteItem({ id: bookmarkId, name: bookmarkTitle, bookmark: bookmark });
     setDeleteType('bookmark');
     setShowDeleteConfirm(true);
@@ -618,7 +646,7 @@ const Bookmarks = ({ onBack }) => {
 
   const confirmDeleteBookmark = async () => {
     if (!deleteItem || deleteType !== 'bookmark') return;
-    
+
     try {
       setDeleting(true);
       const bookmark = deleteItem.bookmark;
@@ -655,11 +683,11 @@ const Bookmarks = ({ onBack }) => {
             await apiService.deleteBookmark(bookmarkId);
         }
       }
-      
+
       // Remove from local state
       setBookmarks(prev => prev.filter(item => item.id !== bookmarkId));
       setSelectedItems(prev => prev.filter(id => id !== bookmarkId));
-      
+
       // Close modal
       setShowDeleteConfirm(false);
       setDeleteItem(null);
@@ -682,10 +710,10 @@ const Bookmarks = ({ onBack }) => {
         await apiService.updateBookmark(bookmarkId, {
           is_favorite: !bookmark.is_favorite
         });
-        
+
         // Update local state
-        setBookmarks(prev => 
-          prev.map(item => 
+        setBookmarks(prev =>
+          prev.map(item =>
             item.id === bookmarkId ? { ...item, is_favorite: !item.is_favorite } : item
           )
         );
@@ -701,10 +729,10 @@ const Bookmarks = ({ onBack }) => {
       await apiService.updateBookmark(bookmarkId, {
         folder_id: folderId
       });
-      
+
       // Update local state
-      setBookmarks(prev => 
-        prev.map(item => 
+      setBookmarks(prev =>
+        prev.map(item =>
           item.id === bookmarkId ? { ...item, folder_id: folderId } : item
         )
       );
@@ -715,8 +743,8 @@ const Bookmarks = ({ onBack }) => {
   };
 
   const handleSelectItem = (itemId) => {
-    setSelectedItems(prev => 
-      prev.includes(itemId) 
+    setSelectedItems(prev =>
+      prev.includes(itemId)
         ? prev.filter(id => id !== itemId)
         : [...prev, itemId]
     );
@@ -732,10 +760,10 @@ const Bookmarks = ({ onBack }) => {
 
   const handleDeleteMultiple = () => {
     if (selectedItems.length === 0) return;
-    
+
     // Get the bookmarks to delete
     const bookmarksToDelete = bookmarks.filter(b => selectedItems.includes(b.id));
-    
+
     setDeleteItem(bookmarksToDelete);
     setDeleteType('multiple');
     setShowDeleteConfirm(true);
@@ -743,11 +771,11 @@ const Bookmarks = ({ onBack }) => {
 
   const confirmDeleteMultiple = async () => {
     if (!deleteItem || !Array.isArray(deleteItem) || deleteItem.length === 0) return;
-    
+
     try {
       setDeleting(true);
       const errors = [];
-      
+
       // Delete each bookmark
       for (const bookmark of deleteItem) {
         try {
@@ -789,16 +817,16 @@ const Bookmarks = ({ onBack }) => {
           errors.push({ id: bookmark.id, error: err.message });
         }
       }
-      
+
       // Remove successfully deleted bookmarks from state
       const deletedIds = deleteItem.map(b => b.id).filter(id => !errors.find(e => e.id === id));
       setBookmarks(prev => prev.filter(item => !deletedIds.includes(item.id)));
       setSelectedItems([]);
-      
+
       if (errors.length > 0) {
         setError(`Failed to delete ${errors.length} bookmark(s). Please try again.`);
       }
-      
+
       // Close modal
       setShowDeleteConfirm(false);
       setDeleteItem(null);
@@ -819,7 +847,7 @@ const Bookmarks = ({ onBack }) => {
     const now = new Date();
     const diffTime = Math.abs(now - date);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
     return date.toLocaleDateString();
@@ -853,13 +881,13 @@ const Bookmarks = ({ onBack }) => {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-2 sm:space-y-6">
       {/* Error Display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
             <div className="flex items-start flex-1 min-w-0">
-              <AlertCircle className="h-5 w-5 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-4 w-4 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-medium text-red-800 mb-1" style={{ fontFamily: 'Roboto, sans-serif' }}>Error</h3>
                 <p className="text-sm text-red-700 break-words whitespace-normal" style={{ fontFamily: 'Roboto, sans-serif', wordBreak: 'break-word' }}>{error}</p>
@@ -877,29 +905,29 @@ const Bookmarks = ({ onBack }) => {
       )}
 
       {/* Perfect Header */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 shadow-sm">
-        <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-3 shadow-sm">
+        <div className="flex flex-col gap-2 sm:gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 sm:gap-0">
             {/* Mobile Back Button */}
             {onBack && (
               <button
                 onClick={onBack}
-                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors mr-2"
+                className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 transition-colors mr-2"
                 aria-label="Back to Dashboard"
               >
-                <ArrowLeft className="h-5 w-5 text-gray-700" />
+                <ArrowLeft className="h-4 w-4 text-gray-700" />
               </button>
             )}
             <div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-1" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>My Bookmarks</h1>
+              <h1 className="text-base sm:text-base md:text-3xl font-bold mb-1" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>My Bookmarks</h1>
               <p className="text-gray-600 text-xs sm:text-sm" style={{ fontFamily: 'Roboto, sans-serif' }}>
                 {sortedBookmarks.length} bookmarks • {folders.length} folders
-              {(filterType !== 'all' || searchQuery || Object.values(advancedFilters).some(v => 
-                v !== null && v !== '' && (typeof v !== 'object' || Object.values(v).some(subV => subV !== ''))
-              )) && (
-                <span className="ml-2 text-blue-600 font-medium">• Filtered</span>
-              )}
-            </p>
+                {(filterType !== 'all' || searchQuery || Object.values(advancedFilters).some(v =>
+                  v !== null && v !== '' && (typeof v !== 'object' || Object.values(v).some(subV => subV !== ''))
+                )) && (
+                    <span className="ml-2 text-blue-600 font-medium">• Filtered</span>
+                  )}
+              </p>
             </div>
           </div>
         </div>
@@ -910,8 +938,8 @@ const Bookmarks = ({ onBack }) => {
       {activeTab === 'bookmarks' && (
         <>
           {/* Search and Filters - Exact Notes Style */}
-          <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row gap-3">
+          <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-3 shadow-sm">
+            <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-gray-400" />
                 <input
@@ -926,7 +954,7 @@ const Bookmarks = ({ onBack }) => {
               <select
                 value={filterType}
                 onChange={(e) => handleFilterChange('type', e.target.value)}
-                className="px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-xs sm:text-sm"
+                className="px-3 sm:px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-xs sm:text-sm"
                 style={{ fontFamily: 'Roboto, sans-serif' }}
               >
                 <option value="all">All Types</option>
@@ -941,623 +969,621 @@ const Bookmarks = ({ onBack }) => {
           </div>
 
 
-      {/* Folders */}
-      {!currentFolder && (
-        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between mb-4 sm:mb-5">
-            <h2 className="text-base sm:text-lg font-semibold text-gray-900" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>Folders</h2>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-            {/* New Folder Card */}
-            <div
-              onClick={() => setShowCreateFolder(true)}
-              className="relative flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group hover:shadow-md cursor-pointer"
-            >
-              <div 
-                className="p-2 sm:p-3 rounded-lg mb-1.5 sm:mb-2 transition-transform group-hover:scale-110"
-                style={{ backgroundColor: '#CF9B6320' }}
-              >
-                <FolderPlus 
-                  className="h-6 w-6 sm:h-8 sm:w-8" 
-                  style={{ color: '#CF9B63' }}
-                />
+          {/* Folders */}
+          {!currentFolder && (
+            <div className="bg-white rounded-lg p-3 sm:p-3 shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between mb-4 sm:mb-5">
+                <h2 className="text-base sm:text-base font-semibold text-gray-900" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>Folders</h2>
               </div>
-              <h3 className="font-medium text-gray-900 text-xs sm:text-sm text-center group-hover:text-blue-700 mb-0.5 sm:mb-1" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                New Folder
-              </h3>
-              <p className="text-xs text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                Create new
-              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2">
+                {/* New Folder Card */}
+                <div
+                  onClick={() => setShowCreateFolder(true)}
+                  className="relative flex flex-col items-center justify-center p-3 sm:p-3 rounded-lg border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group hover:shadow-md cursor-pointer"
+                >
+                  <div
+                    className="p-2 sm:p-3 rounded-lg mb-1.5 sm:mb-2 transition-transform group-hover:scale-110"
+                    style={{ backgroundColor: '#CF9B6320' }}
+                  >
+                    <FolderPlus
+                      className="h-4 w-4 sm:h-8 sm:w-8"
+                      style={{ color: '#CF9B63' }}
+                    />
+                  </div>
+                  <h3 className="font-medium text-gray-900 text-xs sm:text-sm text-center group-hover:text-blue-700 mb-0.5 sm:mb-1" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                    New Folder
+                  </h3>
+                  <p className="text-xs text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                    Create new
+                  </p>
+                </div>
+
+                {folders.map((folder) => (
+                  <div
+                    key={folder.id}
+                    className="relative flex flex-col items-center p-3 sm:p-3 rounded-lg border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group hover:shadow-md"
+                  >
+                    <button
+                      onClick={() => {
+                        // FIX: Clear bookmarks and reset pagination when opening a folder
+                        // This prevents duplicates from previous folder/bookmark state
+                        setBookmarks([]);
+                        setPagination({ limit: 50, offset: 0, hasMore: false });
+                        setSelectedItems([]); // Clear selections when changing folders
+                        setCurrentFolder(folder);
+                      }}
+                      className="flex flex-col items-center w-full"
+                    >
+                      <div
+                        className="p-2 sm:p-3 rounded-lg mb-1.5 sm:mb-2 transition-transform group-hover:scale-110"
+                        style={{ backgroundColor: (folder.color || '#1E65AD') + '20' }}
+                      >
+                        <Folder
+                          className="h-4 w-4 sm:h-8 sm:w-8"
+                          style={{ color: folder.color || '#1E65AD' }}
+                        />
+                      </div>
+                      <h3 className="font-medium text-gray-900 text-xs sm:text-sm text-center group-hover:text-blue-700 mb-0.5 sm:mb-1 truncate w-full px-1" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {folder.name}
+                      </h3>
+                      <p className="text-xs text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {folder.bookmark_count || 0} items
+                      </p>
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteFolder(folder.id, e)}
+                      className="absolute top-2 right-2 p-1.5 rounded hover:bg-red-100 flex-shrink-0 transition-colors"
+                      title="Delete folder"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-            
-            {folders.map((folder) => (
-              <div
-                key={folder.id}
-                className="relative flex flex-col items-center p-3 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group hover:shadow-md"
-              >
+          )}
+
+          {/* Current Folder Header */}
+          {currentFolder && (
+            <div className="flex items-center justify-between bg-white rounded-lg p-3 sm:p-3 shadow-sm border border-gray-200">
+              <div className="flex items-center min-w-0 flex-1">
                 <button
                   onClick={() => {
-                    // FIX: Clear bookmarks and reset pagination when opening a folder
-                    // This prevents duplicates from previous folder/bookmark state
+                    // FIX: Clear bookmarks and reset pagination when going back to all folders
+                    // This prevents duplicates from previous folder state
                     setBookmarks([]);
                     setPagination({ limit: 50, offset: 0, hasMore: false });
                     setSelectedItems([]); // Clear selections when changing folders
-                    setCurrentFolder(folder);
+                    setCurrentFolder(null);
                   }}
-                  className="flex flex-col items-center w-full"
+                  className="mr-2 sm:mr-4 p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                  title="Back to all folders"
                 >
-                  <div 
-                    className="p-2 sm:p-3 rounded-lg mb-1.5 sm:mb-2 transition-transform group-hover:scale-110"
-                    style={{ backgroundColor: (folder.color || '#1E65AD') + '20' }}
-                  >
-                    <Folder 
-                      className="h-6 w-6 sm:h-8 sm:w-8" 
-                      style={{ color: folder.color || '#1E65AD' }}
-                    />
-                  </div>
-                  <h3 className="font-medium text-gray-900 text-xs sm:text-sm text-center group-hover:text-blue-700 mb-0.5 sm:mb-1 truncate w-full px-1" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                    {folder.name}
-                  </h3>
-                  <p className="text-xs text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                    {folder.bookmark_count || 0} items
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                </button>
+                <div
+                  className="p-2 sm:p-3 rounded-lg mr-2 sm:mr-3 flex-shrink-0"
+                  style={{ backgroundColor: (currentFolder.color || '#1E65AD') + '20' }}
+                >
+                  <Folder
+                    className="h-4 w-4 sm:h-6 sm:w-6"
+                    style={{ color: currentFolder.color || '#1E65AD' }}
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-base sm:text-base font-semibold text-gray-900 mb-0.5 sm:mb-1 truncate" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>{currentFolder.name}</h2>
+                  <p className="text-xs sm:text-sm text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                    {sortedBookmarks.length} bookmark{sortedBookmarks.length !== 1 ? 's' : ''}
                   </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bookmarks Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            {/* Header with Title and View Mode */}
+            <div className="flex items-center justify-between p-3 sm:p-3 border-b border-gray-200">
+              <h2 className="text-base sm:text-base font-semibold truncate flex-1 min-w-0" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+                <span className="hidden sm:inline">{currentFolder ? `${currentFolder.name} Bookmarks` : 'All Bookmarks'}</span>
+                <span className="sm:hidden">{currentFolder ? currentFolder.name : 'All Bookmarks'}</span>
+                <span className="ml-1 sm:ml-2">({sortedBookmarks.length})</span>
+              </h2>
+              <div className="flex items-center space-x-1 sm:space-x-1.5 flex-shrink-0">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 sm:p-1 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-blue-100' : 'hover:bg-gray-100'
+                    }`}
+                  style={{ color: viewMode === 'grid' ? '#1E65AD' : '#6B7280' }}
+                  title="Grid View"
+                >
+                  <Grid className="h-4 w-4 sm:h-5 sm:w-5" />
                 </button>
                 <button
-                  onClick={(e) => handleDeleteFolder(folder.id, e)}
-                  className="absolute top-2 right-2 p-1.5 rounded hover:bg-red-100 flex-shrink-0 transition-colors"
-                  title="Delete folder"
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 sm:p-1 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-blue-100' : 'hover:bg-gray-100'
+                    }`}
+                  style={{ color: viewMode === 'list' ? '#1E65AD' : '#6B7280' }}
+                  title="List View"
                 >
-                  <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
+                  <List className="h-4 w-4 sm:h-5 sm:w-5" />
                 </button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Current Folder Header */}
-      {currentFolder && (
-        <div className="flex items-center justify-between bg-white rounded-xl p-4 sm:p-5 shadow-sm border border-gray-200">
-          <div className="flex items-center min-w-0 flex-1">
-            <button
-              onClick={() => {
-                // FIX: Clear bookmarks and reset pagination when going back to all folders
-                // This prevents duplicates from previous folder state
-                setBookmarks([]);
-                setPagination({ limit: 50, offset: 0, hasMore: false });
-                setSelectedItems([]); // Clear selections when changing folders
-                setCurrentFolder(null);
-              }}
-              className="mr-2 sm:mr-4 p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-              title="Back to all folders"
-            >
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </button>
-            <div 
-              className="p-2 sm:p-3 rounded-lg mr-2 sm:mr-3 flex-shrink-0"
-              style={{ backgroundColor: (currentFolder.color || '#1E65AD') + '20' }}
-            >
-              <Folder 
-                className="h-5 w-5 sm:h-6 sm:w-6" 
-                style={{ color: currentFolder.color || '#1E65AD' }}
-              />
             </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-0.5 sm:mb-1 truncate" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>{currentFolder.name}</h2>
-              <p className="text-xs sm:text-sm text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                {sortedBookmarks.length} bookmark{sortedBookmarks.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bookmarks Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        {/* Header with Title and View Mode */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
-          <h2 className="text-base sm:text-lg font-semibold truncate flex-1 min-w-0" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
-            <span className="hidden sm:inline">{currentFolder ? `${currentFolder.name} Bookmarks` : 'All Bookmarks'}</span>
-            <span className="sm:hidden">{currentFolder ? currentFolder.name : 'All Bookmarks'}</span>
-            <span className="ml-1 sm:ml-2">({sortedBookmarks.length})</span>
-          </h2>
-          <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 sm:p-2 rounded-lg transition-colors ${
-                viewMode === 'grid' ? 'bg-blue-100' : 'hover:bg-gray-100'
-              }`}
-              style={{ color: viewMode === 'grid' ? '#1E65AD' : '#6B7280' }}
-              title="Grid View"
-            >
-              <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-1.5 sm:p-2 rounded-lg transition-colors ${
-                viewMode === 'list' ? 'bg-blue-100' : 'hover:bg-gray-100'
-              }`}
-              style={{ color: viewMode === 'list' ? '#1E65AD' : '#6B7280' }}
-              title="List View"
-            >
-              <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-          </div>
-        </div>
-        {loading && bookmarks.length === 0 ? (
-          <div className="p-8 sm:p-12 md:p-16 text-center">
-            <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 text-blue-600 mx-auto mb-3 sm:mb-4 animate-spin" />
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1.5 sm:mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>Loading bookmarks...</h3>
-            <p className="text-gray-500 text-xs sm:text-sm" style={{ fontFamily: 'Roboto, sans-serif' }}>Please wait while we fetch your bookmarks</p>
-          </div>
-        ) : sortedBookmarks.length === 0 ? (
-          <div className="p-8 sm:p-12 md:p-16 text-center">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full bg-gray-100 flex items-center justify-center">
-              <Bookmark className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400" />
-            </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1.5 sm:mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>No bookmarks found</h3>
-            <p className="text-gray-500 text-xs sm:text-sm mb-3 sm:mb-4" style={{ fontFamily: 'Roboto, sans-serif' }}>
-              {searchQuery ? 'Try adjusting your search criteria' : 'Start by bookmarking items from the legal library'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Bulk Actions */}
-            {selectedItems.length > 0 && (
-              <div className="p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
-                  <span className="text-xs sm:text-sm font-medium text-blue-800" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                    {selectedItems.length} item{selectedItems.length > 1 ? 's' : ''} selected
-                  </span>
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <button 
-                      onClick={handleSelectAll}
-                      className="flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
-                      style={{ fontFamily: 'Roboto, sans-serif' }}
-                    >
-                      {selectedItems.length === sortedBookmarks.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                    <button 
-                      onClick={handleDeleteMultiple}
-                      className="flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-sm"
-                      style={{ fontFamily: 'Roboto, sans-serif' }}
-                    >
-                      Delete Selected
-                    </button>
-                  </div>
-                </div>
+            {loading && bookmarks.length === 0 ? (
+              <div className="p-8 sm:p-12 md:p-16 text-center">
+                <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 text-blue-600 mx-auto mb-3 sm:mb-4 animate-spin" />
+                <h3 className="text-base sm:text-base font-semibold text-gray-900 mb-1.5 sm:mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>Loading bookmarks...</h3>
+                <p className="text-gray-500 text-xs sm:text-sm" style={{ fontFamily: 'Roboto, sans-serif' }}>Please wait while we fetch your bookmarks</p>
               </div>
-            )}
-
-            {viewMode === 'grid' ? (
-              <div className="p-4 sm:p-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
-                  {sortedBookmarks.map((bookmark) => (
-                    <div
-                      key={bookmark.id}
-                      className={`relative bg-white border rounded-lg sm:rounded-xl p-4 sm:p-5 hover:shadow-xl transition-all duration-200 cursor-pointer group ${
-                        selectedItems.includes(bookmark.id) ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200 hover:border-blue-200 hover:border-2'
-                      }`}
-                      onClick={(e) => {
-                        // Only select if clicking on the card itself, not on buttons
-                        if (e.target.closest('button') || e.target.closest('input')) {
-                          return;
-                        }
-                        handleViewBookmark(bookmark);
-                      }}
-                    >
-                      {/* Selection Checkbox */}
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.includes(bookmark.id)}
-                        onChange={() => handleSelectItem(bookmark.id)}
-                        className="absolute top-2 left-2 sm:top-3 sm:left-3 w-4 h-4 sm:w-4 sm:h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer z-50 bg-white shadow-md"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ zIndex: 50 }}
-                      />
-
-                      {/* Favorite Star */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleFavorite(bookmark.id);
-                        }}
-                        className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1 sm:p-1.5 hover:bg-gray-100 rounded-lg transition-colors z-10"
-                        title={bookmark.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-                      >
-                        {bookmark.is_favorite ? (
-                          <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-yellow-500 fill-current" />
-                        ) : (
-                          <StarOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 group-hover:text-yellow-400" />
-                        )}
-                      </button>
-
-                      {/* File Icon */}
-                      <div className="flex justify-center mb-3 sm:mb-4 mt-1 sm:mt-2 pl-5 sm:pl-0">
-                        <div className={`p-3 sm:p-4 rounded-xl transition-transform group-hover:scale-105 ${
-                          bookmark.type === 'judgement' ? 'bg-blue-50' :
-                          bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'bg-green-50' :
-                          'bg-purple-50'
-                        }`}>
-                          <FileText className={`h-6 w-6 sm:h-8 sm:w-8 ${
-                            bookmark.type === 'judgement' ? 'text-blue-600' :
-                            bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'text-green-600' :
-                            'text-purple-600'
-                          }`} />
-                        </div>
-                      </div>
-
-                      {/* Bookmark Info */}
-                      <div className="text-center">
-                        <h3 className="font-semibold text-gray-900 text-sm sm:text-base mb-2 sm:mb-3 line-clamp-2 leading-tight min-h-[2.5rem]" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                          {getBookmarkTitle(bookmark)}
-                        </h3>
-                        
-                        {/* Type Badge */}
-                        <div className="mb-2 sm:mb-3">
-                          <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full whitespace-nowrap ${
-                            bookmark.type === 'judgement' ? 'bg-blue-100 text-blue-800' :
-                            bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'bg-green-100 text-green-800' :
-                            'bg-purple-100 text-purple-800'
-                          }`} style={{ fontFamily: 'Roboto, sans-serif' }}>
-                            {bookmark.type === 'judgement' ? 'Judgement' :
-                             bookmark.type === 'central_act' ? 'Central Act' :
-                             bookmark.type === 'state_act' ? 'State Act' :
-                             bookmark.type === 'bns_ipc_mapping' ? 'BNS-IPC' :
-                             bookmark.type === 'bsa_iea_mapping' ? 'BSA-IEA' :
-                             bookmark.type === 'bnss_crpc_mapping' ? 'BNSS-CrPC' :
-                             bookmark.type.replace('_', ' ').replace('mapping', '').trim()}
-                          </span>
-                        </div>
-                        
-                        {/* Tags */}
-                        {(bookmark.tags || []).length > 0 && (
-                          <div className="flex flex-wrap justify-center gap-1.5 mb-3">
-                            {(bookmark.tags || []).slice(0, 2).map((tag, index) => (
-                              <span
-                                key={index}
-                                className="inline-flex px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-md font-medium"
-                                style={{ fontFamily: 'Roboto, sans-serif' }}
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                            {(bookmark.tags || []).length > 2 && (
-                              <span className="text-xs text-gray-500 font-medium" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                                +{(bookmark.tags || []).length - 2}
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-center text-xs text-gray-500 pt-2 sm:pt-3 border-t border-gray-100" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                          <Clock className="h-3.5 w-3.5 mr-1.5 text-gray-400" />
-                          <span>{formatDate(bookmark.created_at || bookmark.dateAdded)}</span>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <div className="flex space-x-1 bg-white rounded-lg shadow-lg border border-gray-200 p-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewBookmark(bookmark);
-                            }}
-                            className="p-1.5 hover:bg-blue-50 rounded transition-colors"
-                            title="View"
-                          >
-                            <Eye className="h-4 w-4 text-blue-600" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteBookmark(bookmark);
-                            }}
-                            className="p-1.5 hover:bg-red-50 rounded transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+            ) : sortedBookmarks.length === 0 ? (
+              <div className="p-8 sm:p-12 md:p-16 text-center">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+                  <Bookmark className="h-4 w-4 sm:h-8 sm:w-8 text-gray-400" />
                 </div>
+                <h3 className="text-base sm:text-base font-semibold text-gray-900 mb-1.5 sm:mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>No bookmarks found</h3>
+                <p className="text-gray-500 text-xs sm:text-sm mb-3 sm:mb-4" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                  {searchQuery ? 'Try adjusting your search criteria' : 'Start by bookmarking items from the legal library'}
+                </p>
               </div>
             ) : (
-              <div className="space-y-2 sm:space-y-3">
-                {/* List View Header with Select All - Mobile */}
-                {sortedBookmarks.length > 0 && (
-                  <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 border-b border-gray-200 bg-gray-50 lg:hidden">
-                    <input
-                      type="checkbox"
-                      checked={selectedItems.length === sortedBookmarks.length && sortedBookmarks.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded w-4 h-4 flex-shrink-0"
-                    />
-                    <span className="text-xs sm:text-sm text-gray-600 font-medium" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                      Select All
-                    </span>
+              <>
+                {/* Bulk Actions */}
+                {selectedItems.length > 0 && (
+                  <div className="p-3 sm:p-3 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+                      <span className="text-xs sm:text-sm font-medium text-blue-800" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                        {selectedItems.length} item{selectedItems.length > 1 ? 's' : ''} selected
+                      </span>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={handleSelectAll}
+                          className="flex-1 sm:flex-initial px-3 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
+                          style={{ fontFamily: 'Roboto, sans-serif' }}
+                        >
+                          {selectedItems.length === sortedBookmarks.length ? 'Deselect All' : 'Select All'}
+                        </button>
+                        <button
+                          onClick={handleDeleteMultiple}
+                          className="flex-1 sm:flex-initial px-3 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-sm"
+                          style={{ fontFamily: 'Roboto, sans-serif' }}
+                        >
+                          Delete Selected
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
-                {/* Desktop Table View */}
-                <div className="hidden lg:block overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                        <th className="px-4 py-3 text-left w-12">
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.length === sortedBookmarks.length && sortedBookmarks.length > 0}
-                          onChange={handleSelectAll}
-                            className="rounded w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
-                        />
-                      </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                        Bookmark
-                      </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-32" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                        Type
-                      </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-40" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                        Tags
-                      </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-32" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                        Date Added
-                      </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-28" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {sortedBookmarks.map((bookmark) => (
-                      <tr
-                        key={bookmark.id}
-                          className={`transition-colors ${selectedItems.includes(bookmark.id) ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'}`}
-                      >
-                          <td className="px-4 py-4 whitespace-nowrap">
+
+                {viewMode === 'grid' ? (
+                  <div className="p-3 sm:p-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-2">
+                      {sortedBookmarks.map((bookmark) => (
+                        <div
+                          key={bookmark.id}
+                          className={`relative bg-white border rounded-lg sm:rounded-lg p-2.5 sm:p-2.5 hover:shadow-xl transition-all duration-200 cursor-pointer group ${selectedItems.includes(bookmark.id) ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200 hover:border-blue-200 hover:border-2'
+                            }`}
+                          onClick={(e) => {
+                            // Only select if clicking on the card itself, not on buttons
+                            if (e.target.closest('button') || e.target.closest('input')) {
+                              return;
+                            }
+                            handleViewBookmark(bookmark);
+                          }}
+                        >
+                          {/* Selection Checkbox */}
                           <input
                             type="checkbox"
                             checked={selectedItems.includes(bookmark.id)}
                             onChange={() => handleSelectItem(bookmark.id)}
-                              className="rounded w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                            className="absolute top-2 left-2 sm:top-3 sm:left-3 w-4 h-4 sm:w-4 sm:h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer z-50 bg-white shadow-md"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ zIndex: 50 }}
                           />
-                        </td>
-                          <td className="px-4 py-4">
-                          <div className="flex items-center min-w-0">
-                              <div className="flex-shrink-0 mr-3">
-                                <div className={`p-2 rounded-lg ${
-                                  bookmark.type === 'judgement' ? 'bg-blue-50' :
-                                  bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'bg-green-50' :
-                                  'bg-purple-50'
-                                }`}>
-                                  <FileText className={`h-5 w-5 ${
-                                    bookmark.type === 'judgement' ? 'text-blue-600' :
-                                    bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'text-green-600' :
-                                    'text-purple-600'
-                                  }`} />
-                            </div>
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="text-sm font-semibold text-gray-900 truncate mb-1" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                                {getBookmarkTitle(bookmark)}
-                              </div>
-                                {(bookmark.item || bookmark).description && (
-                                  <div className="text-xs text-gray-500 truncate" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                                    {(bookmark.item || bookmark).description}
-                              </div>
-                                )}
-                            </div>
-                          </div>
-                        </td>
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${getTypeColor(bookmark.type)}`} style={{ fontFamily: 'Roboto, sans-serif' }}>
-                              {bookmark.type === 'judgement' ? 'Judgement' :
-                               bookmark.type === 'central_act' ? 'Central Act' :
-                               bookmark.type === 'state_act' ? 'State Act' :
-                               bookmark.type === 'bns_ipc_mapping' ? 'BNS-IPC' :
-                               bookmark.type === 'bsa_iea_mapping' ? 'BSA-IEA' :
-                               bookmark.type === 'bnss_crpc_mapping' ? 'BNSS-CrPC' :
-                               bookmark.type.replace('_', ' ').replace('mapping', '').trim()}
-                          </span>
-                        </td>
-                          <td className="px-4 py-4">
-                            <div className="flex flex-wrap gap-1.5">
-                            {(bookmark.tags || []).slice(0, 2).map((tag, index) => (
-                              <span
-                                key={index}
-                                  className="inline-flex px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-md font-medium"
-                                  style={{ fontFamily: 'Roboto, sans-serif' }}
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                            {(bookmark.tags || []).length > 2 && (
-                                <span className="inline-flex items-center px-2 py-0.5 text-xs text-gray-500 font-medium" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                                +{(bookmark.tags || []).length - 2}
-                              </span>
-                            )}
-                              {(!bookmark.tags || bookmark.tags.length === 0) && (
-                                <span className="text-xs text-gray-400 italic" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                                  No tags
-                                </span>
-                              )}
-                          </div>
-                        </td>
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-sm text-gray-600" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                              <Clock className="h-4 w-4 mr-1.5 text-gray-400 flex-shrink-0" />
-                              <span>{formatDate(bookmark.created_at || bookmark.dateAdded)}</span>
-                            </div>
-                        </td>
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => handleToggleFavorite(bookmark.id)}
-                                className={`p-1.5 rounded-lg transition-colors ${
-                                  bookmark.is_favorite 
-                                    ? 'text-yellow-500 bg-yellow-50 hover:bg-yellow-100' 
-                                    : 'text-gray-400 hover:text-yellow-500 hover:bg-gray-100'
-                                }`}
-                              title={bookmark.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-                            >
-                                <Star className={`h-4 w-4 ${bookmark.is_favorite ? 'fill-current' : ''}`} />
-                            </button>
-                            <button
-                              onClick={() => handleViewBookmark(bookmark)}
-                                className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
-                              title="View"
-                            >
-                                <Eye className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBookmark(bookmark)}
-                                className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-                              title="Delete"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                </div>
-                {/* Mobile Card View */}
-                <div className="lg:hidden space-y-2 sm:space-y-3 px-2.5 sm:px-4 pb-2.5 sm:pb-4">
-                  {sortedBookmarks.map((bookmark) => {
-                    const colors = getTypeColor(bookmark.type);
-                    return (
-                      <div
-                        key={bookmark.id}
-                        onClick={(e) => {
-                          if (e.target.closest('button') || e.target.closest('input')) {
-                            return;
-                          }
-                          handleViewBookmark(bookmark);
-                        }}
-                        className={`p-2.5 sm:p-4 rounded-lg border cursor-pointer transition-all duration-200 hover:shadow-md flex items-start sm:items-center justify-between gap-2 sm:gap-3 ${
-                          selectedItems.includes(bookmark.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        {/* Selection Checkbox */}
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.includes(bookmark.id)}
-                          onChange={() => handleSelectItem(bookmark.id)}
-                          className="rounded w-4 h-4 flex-shrink-0 mt-1 sm:mt-0"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <div className="flex items-start sm:items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
-                          <div 
-                            className="p-1.5 sm:p-2.5 rounded-lg flex-shrink-0"
-                            style={{ backgroundColor: bookmark.type === 'judgement' ? '#E3F2FD' : bookmark.type === 'central_act' || bookmark.type === 'state_act' ? '#E8F5E9' : '#F3E5F5' }}
-                          >
-                            <FileText className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: bookmark.type === 'judgement' ? '#1E65AD' : bookmark.type === 'central_act' || bookmark.type === 'state_act' ? '#10B981' : '#8B5CF6' }} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-                              <span 
-                                className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${colors}`}
-                                style={{ fontFamily: 'Roboto, sans-serif' }}
-                              >
-                                {bookmark.type === 'judgement' ? 'Judgement' :
-                                 bookmark.type === 'central_act' ? 'Central Act' :
-                                 bookmark.type === 'state_act' ? 'State Act' :
-                                 bookmark.type === 'bns_ipc_mapping' ? 'BNS IPC' :
-                                 bookmark.type === 'bsa_iea_mapping' ? 'BSA IEA' :
-                                 bookmark.type === 'bnss_crpc_mapping' ? 'BNSS CrPC' :
-                                 bookmark.type.replace('_', ' ').replace('mapping', '').trim()}
-                              </span>
-                            </div>
-                            <h3 className="font-semibold text-gray-900 mb-1 sm:mb-1.5 text-sm sm:text-base line-clamp-1 sm:truncate leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                              {getBookmarkTitle(bookmark)}
-                            </h3>
-                            <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 sm:line-clamp-1 mb-1.5 sm:mb-2 leading-relaxed" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                              {(bookmark.item || bookmark).description || ''}
-                            </p>
-                            <div className="flex items-center flex-wrap gap-1.5 sm:gap-3 text-[10px] sm:text-xs text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                              <span className="flex items-center space-x-0.5 sm:space-x-1">
-                                <Clock className="h-3 w-3 flex-shrink-0" />
-                                <span className="whitespace-nowrap">{formatDate(bookmark.created_at || bookmark.dateAdded)}</span>
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-1 sm:gap-2 flex-shrink-0 mt-1 sm:mt-0">
+
+                          {/* Favorite Star */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleToggleFavorite(bookmark.id);
                             }}
-                            className={`p-1.5 sm:p-2 rounded hover:bg-gray-100 transition-colors ${bookmark.is_favorite ? 'text-yellow-500' : 'text-gray-400'}`}
+                            className="absolute top-2 right-2 sm:top-3 sm:right-3 p-1 sm:p-1.5 hover:bg-gray-100 rounded-lg transition-colors z-10"
                             title={bookmark.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
                           >
-                            <Star className={`h-4 w-4 ${bookmark.is_favorite ? 'fill-current' : ''}`} />
+                            {bookmark.is_favorite ? (
+                              <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-yellow-500 fill-current" />
+                            ) : (
+                              <StarOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 group-hover:text-yellow-400" />
+                            )}
                           </button>
-                          <button
+
+                          {/* File Icon */}
+                          <div className="flex justify-center mb-2 sm:mb-3 mt-1 sm:mt-1 pl-5 sm:pl-0">
+                            <div className={`p-2 sm:p-2 rounded-lg transition-transform group-hover:scale-105 ${bookmark.type === 'judgement' ? 'bg-blue-50' :
+                              bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'bg-green-50' :
+                                'bg-purple-50'
+                              }`}>
+                              <FileText className={`h-4 w-4 sm:h-6 sm:w-6 ${bookmark.type === 'judgement' ? 'text-blue-600' :
+                                bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'text-green-600' :
+                                  'text-purple-600'
+                                }`} />
+                            </div>
+                          </div>
+
+                          {/* Bookmark Info */}
+                          <div className="text-center">
+                            <h3 className="font-semibold text-gray-900 text-xs sm:text-sm mb-1.5 sm:mb-2 line-clamp-2 leading-tight min-h-[2rem]" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                              {getBookmarkTitle(bookmark)}
+                            </h3>
+
+                            {/* Type Badge */}
+                            <div className="mb-2 sm:mb-3">
+                              <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full whitespace-nowrap ${bookmark.type === 'judgement' ? 'bg-blue-100 text-blue-800' :
+                                bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'bg-green-100 text-green-800' :
+                                  'bg-purple-100 text-purple-800'
+                                }`} style={{ fontFamily: 'Roboto, sans-serif' }}>
+                                {bookmark.type === 'judgement' ? 'Judgement' :
+                                  bookmark.type === 'central_act' ? 'Central Act' :
+                                    bookmark.type === 'state_act' ? 'State Act' :
+                                      bookmark.type === 'bns_ipc_mapping' ? 'BNS-IPC' :
+                                        bookmark.type === 'bsa_iea_mapping' ? 'BSA-IEA' :
+                                          bookmark.type === 'bnss_crpc_mapping' ? 'BNSS-CrPC' :
+                                            bookmark.type.replace('_', ' ').replace('mapping', '').trim()}
+                              </span>
+                            </div>
+
+                            {/* Tags */}
+                            {(bookmark.tags || []).length > 0 && (
+                              <div className="flex flex-wrap justify-center gap-1.5 mb-3">
+                                {(bookmark.tags || []).slice(0, 2).map((tag, index) => (
+                                  <span
+                                    key={index}
+                                    className="inline-flex px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-md font-medium"
+                                    style={{ fontFamily: 'Roboto, sans-serif' }}
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                                {(bookmark.tags || []).length > 2 && (
+                                  <span className="text-xs text-gray-500 font-medium" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                                    +{(bookmark.tags || []).length - 2}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-center text-xs text-gray-500 pt-2 sm:pt-3 border-t border-gray-100" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                              <Clock className="h-3.5 w-3.5 mr-1.5 text-gray-400" />
+                              <span>{formatDate(bookmark.created_at || bookmark.dateAdded)}</span>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex space-x-1 bg-white rounded-lg shadow-lg border border-gray-200 p-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewBookmark(bookmark);
+                                }}
+                                className="p-1.5 hover:bg-blue-50 rounded transition-colors"
+                                title="View"
+                              >
+                                <Eye className="h-4 w-4 text-blue-600" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteBookmark(bookmark);
+                                }}
+                                className="p-1.5 hover:bg-red-50 rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 sm:space-y-2">
+                    {/* List View Header with Select All - Mobile */}
+                    {sortedBookmarks.length > 0 && (
+                      <div className="flex items-center gap-2 sm:gap-2 px-2 sm:px-2.5 py-1.5 border-b border-gray-200 bg-gray-50 lg:hidden">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.length === sortedBookmarks.length && sortedBookmarks.length > 0}
+                          onChange={handleSelectAll}
+                          className="rounded w-4 h-4 flex-shrink-0"
+                        />
+                        <span className="text-xs sm:text-sm text-gray-600 font-medium" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                          Select All
+                        </span>
+                      </div>
+                    )}
+                    {/* Desktop Table View */}
+                    <div className="hidden lg:block overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-3 py-2 text-left w-12">
+                              <input
+                                type="checkbox"
+                                checked={selectedItems.length === sortedBookmarks.length && sortedBookmarks.length > 0}
+                                onChange={handleSelectAll}
+                                className="rounded w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                              />
+                            </th>
+                            <th className="px-2 py-1.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                              Bookmark
+                            </th>
+                            <th className="px-2 py-1.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-32 whitespace-nowrap" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                              Type
+                            </th>
+                            <th className="px-2 py-1.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-40 whitespace-nowrap" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                              Tags
+                            </th>
+                            <th className="px-2 py-1.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-32 whitespace-nowrap" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                              Date Added
+                            </th>
+                            <th className="px-2 py-1.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-32 whitespace-nowrap" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {sortedBookmarks.map((bookmark) => (
+                            <tr
+                              key={bookmark.id}
+                              className={`transition-colors ${selectedItems.includes(bookmark.id) ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'}`}
+                            >
+                              <td className="px-2 py-2.5 whitespace-nowrap">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedItems.includes(bookmark.id)}
+                                  onChange={() => handleSelectItem(bookmark.id)}
+                                  className="rounded w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                />
+                              </td>
+                              <td className="px-2 py-2.5">
+                                <div className="flex items-center min-w-0">
+                                  <div className="flex-shrink-0 mr-3">
+                                    <div className={`p-1.5 rounded-lg ${bookmark.type === 'judgement' ? 'bg-blue-50' :
+                                      bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'bg-green-50' :
+                                        'bg-purple-50'
+                                      }`}>
+                                      <FileText className={`h-4 w-4 ${bookmark.type === 'judgement' ? 'text-blue-600' :
+                                        bookmark.type === 'central_act' || bookmark.type === 'state_act' ? 'text-green-600' :
+                                          'text-purple-600'
+                                        }`} />
+                                    </div>
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div
+                                      className="text-xs font-semibold text-gray-900 line-clamp-2 mb-1"
+                                      style={{ fontFamily: 'Roboto, sans-serif' }}
+                                      title={getBookmarkTitle(bookmark)}
+                                    >
+                                      {getBookmarkTitle(bookmark)}
+                                    </div>
+                                    {(bookmark.item || bookmark).description && (
+                                      <div
+                                        className="text-xs text-gray-500 truncate"
+                                        style={{ fontFamily: 'Roboto, sans-serif' }}
+                                        title={(bookmark.item || bookmark).description}
+                                      >
+                                        {(bookmark.item || bookmark).description}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-2 py-2.5 whitespace-nowrap">
+                                <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${getTypeColor(bookmark.type)}`} style={{ fontFamily: 'Roboto, sans-serif' }}>
+                                  {bookmark.type === 'judgement' ? 'Judgement' :
+                                    bookmark.type === 'central_act' ? 'Central Act' :
+                                      bookmark.type === 'state_act' ? 'State Act' :
+                                        bookmark.type === 'bns_ipc_mapping' ? 'BNS-IPC' :
+                                          bookmark.type === 'bsa_iea_mapping' ? 'BSA-IEA' :
+                                            bookmark.type === 'bnss_crpc_mapping' ? 'BNSS-CrPC' :
+                                              bookmark.type.replace('_', ' ').replace('mapping', '').trim()}
+                                </span>
+                              </td>
+                              <td className="px-2 py-2.5">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(bookmark.tags || []).slice(0, 2).map((tag, index) => (
+                                    <span
+                                      key={index}
+                                      className="inline-flex px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-md font-medium"
+                                      style={{ fontFamily: 'Roboto, sans-serif' }}
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                  {(bookmark.tags || []).length > 2 && (
+                                    <span className="inline-flex items-center px-2 py-0.5 text-xs text-gray-500 font-medium" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                                      +{(bookmark.tags || []).length - 2}
+                                    </span>
+                                  )}
+                                  {(!bookmark.tags || bookmark.tags.length === 0) && (
+                                    <span className="text-xs text-gray-400 italic whitespace-nowrap" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                                      No tags
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2.5 whitespace-nowrap">
+                                <div className="flex items-center text-sm text-gray-600" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                                  <Clock className="h-3.5 w-3.5 mr-1 text-gray-400 flex-shrink-0" />
+                                  <span>{formatDate(bookmark.created_at || bookmark.dateAdded)}</span>
+                                </div>
+                              </td>
+                              <td className="px-2 py-2.5 whitespace-nowrap">
+                                <div className="flex items-center space-x-1.5 flex-nowrap">
+                                  <button
+                                    onClick={() => handleToggleFavorite(bookmark.id)}
+                                    className={`p-1 rounded-lg transition-colors ${bookmark.is_favorite
+                                      ? 'text-yellow-500 bg-yellow-50 hover:bg-yellow-100'
+                                      : 'text-gray-400 hover:text-yellow-500 hover:bg-gray-100'
+                                      }`}
+                                    title={bookmark.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                                  >
+                                    <Star className={`h-4 w-4 ${bookmark.is_favorite ? 'fill-current' : ''}`} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleViewBookmark(bookmark)}
+                                    className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                                    title="View"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteBookmark(bookmark)}
+                                    className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Mobile Card View */}
+                    <div className="lg:hidden space-y-2 sm:space-y-2 px-2.5 sm:px-3 pb-2.5 sm:pb-4">
+                      {sortedBookmarks.map((bookmark) => {
+                        const colors = getTypeColor(bookmark.type);
+                        return (
+                          <div
+                            key={bookmark.id}
                             onClick={(e) => {
-                              e.stopPropagation();
+                              if (e.target.closest('button') || e.target.closest('input')) {
+                                return;
+                              }
                               handleViewBookmark(bookmark);
                             }}
-                            className="p-1.5 sm:p-2 rounded hover:bg-blue-100 transition-colors text-blue-600"
-                            title="View"
+                            className={`p-2.5 sm:p-3 rounded-lg border cursor-pointer transition-all duration-200 hover:shadow-md flex items-start sm:items-center justify-between gap-2 sm:gap-2 ${selectedItems.includes(bookmark.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200 hover:bg-gray-50'
+                              }`}
                           >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteBookmark(bookmark);
-                            }}
-                            className="p-1.5 sm:p-2 rounded hover:bg-red-100 transition-colors text-red-600"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                            {/* Selection Checkbox */}
+                            <input
+                              type="checkbox"
+                              checked={selectedItems.includes(bookmark.id)}
+                              onChange={() => handleSelectItem(bookmark.id)}
+                              className="rounded w-4 h-4 flex-shrink-0 mt-1 sm:mt-0"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div className="flex items-start sm:items-center space-x-1.5 sm:space-x-3 flex-1 min-w-0">
+                              <div
+                                className="p-1.5 sm:p-2.5 rounded-lg flex-shrink-0"
+                                style={{ backgroundColor: bookmark.type === 'judgement' ? '#E3F2FD' : bookmark.type === 'central_act' || bookmark.type === 'state_act' ? '#E8F5E9' : '#F3E5F5' }}
+                              >
+                                <FileText className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: bookmark.type === 'judgement' ? '#1E65AD' : bookmark.type === 'central_act' || bookmark.type === 'state_act' ? '#10B981' : '#8B5CF6' }} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
+                                  <span
+                                    className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap ${colors}`}
+                                    style={{ fontFamily: 'Roboto, sans-serif' }}
+                                  >
+                                    {bookmark.type === 'judgement' ? 'Judgement' :
+                                      bookmark.type === 'central_act' ? 'Central Act' :
+                                        bookmark.type === 'state_act' ? 'State Act' :
+                                          bookmark.type === 'bns_ipc_mapping' ? 'BNS IPC' :
+                                            bookmark.type === 'bsa_iea_mapping' ? 'BSA IEA' :
+                                              bookmark.type === 'bnss_crpc_mapping' ? 'BNSS CrPC' :
+                                                bookmark.type.replace('_', ' ').replace('mapping', '').trim()}
+                                  </span>
+                                </div>
+                                <h3 className="font-semibold text-gray-900 mb-1 sm:mb-1.5 text-sm sm:text-base line-clamp-1 sm:truncate leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                                  {getBookmarkTitle(bookmark)}
+                                </h3>
+                                <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 sm:line-clamp-1 mb-1.5 sm:mb-2 leading-relaxed" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                                  {(bookmark.item || bookmark).description || ''}
+                                </p>
+                                <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                                  <span className="flex items-center space-x-0.5 sm:space-x-1">
+                                    <Clock className="h-3 w-3 flex-shrink-0" />
+                                    <span className="whitespace-nowrap">{formatDate(bookmark.created_at || bookmark.dateAdded)}</span>
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1 sm:gap-2 flex-shrink-0 mt-1 sm:mt-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleFavorite(bookmark.id);
+                                }}
+                                className={`p-1.5 sm:p-2 rounded hover:bg-gray-100 transition-colors ${bookmark.is_favorite ? 'text-yellow-500' : 'text-gray-400'}`}
+                                title={bookmark.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                              >
+                                <Star className={`h-4 w-4 ${bookmark.is_favorite ? 'fill-current' : ''}`} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewBookmark(bookmark);
+                                }}
+                                className="p-1.5 sm:p-2 rounded hover:bg-blue-100 transition-colors text-blue-600"
+                                title="View"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteBookmark(bookmark);
+                                }}
+                                className="p-1.5 sm:p-2 rounded hover:bg-red-100 transition-colors text-red-600"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Load More Button */}
+            {pagination.hasMore && !loading && (
+              <div className="p-3 sm:p-3 border-t border-gray-200 text-center">
+                <button
+                  onClick={() => loadBookmarks(pagination.offset + pagination.limit)}
+                  className="px-3 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Load More Bookmarks
+                </button>
               </div>
             )}
-          </>
-        )}
-        
-        {/* Load More Button */}
-        {pagination.hasMore && !loading && (
-          <div className="p-3 sm:p-4 border-t border-gray-200 text-center">
-            <button
-              onClick={() => loadBookmarks(pagination.offset + pagination.limit)}
-              className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Load More Bookmarks
-            </button>
+
+            {/* Loading More Indicator */}
+            {loading && bookmarks.length > 0 && (
+              <div className="p-3 sm:p-3 border-t border-gray-200 text-center">
+                <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mx-auto animate-spin" />
+                <p className="text-xs sm:text-sm text-gray-500 mt-2">Loading more bookmarks...</p>
+              </div>
+            )}
           </div>
-        )}
-        
-        {/* Loading More Indicator */}
-        {loading && bookmarks.length > 0 && (
-          <div className="p-3 sm:p-4 border-t border-gray-200 text-center">
-            <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mx-auto animate-spin" />
-            <p className="text-xs sm:text-sm text-gray-500 mt-2">Loading more bookmarks...</p>
-          </div>
-        )}
-      </div>
         </>
       )}
 
       {/* Create Folder Modal */}
       {showCreateFolder && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Create New Folder</h3>
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-3">
+          <div className="bg-white rounded-lg p-3 sm:p-3 w-full max-w-md">
+            <h3 className="text-base sm:text-base font-semibold text-gray-900 mb-3 sm:mb-4">Create New Folder</h3>
             <input
               type="text"
               placeholder="Folder name"
@@ -1572,14 +1598,14 @@ const Bookmarks = ({ onBack }) => {
                   setShowCreateFolder(false);
                   setNewFolderName('');
                 }}
-                className="px-3 sm:px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 w-full sm:w-auto"
+                className="px-3 sm:px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 w-full sm:w-auto"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleCreateFolder}
-                className="px-3 sm:px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full sm:w-auto"
+                className="px-3 sm:px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full sm:w-auto"
               >
                 Create
               </button>
@@ -1592,7 +1618,7 @@ const Bookmarks = ({ onBack }) => {
       {showDeleteConfirm && deleteItem && (
         <>
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black bg-opacity-50 z-50"
             onClick={() => {
               if (!deleting) {
@@ -1602,10 +1628,10 @@ const Bookmarks = ({ onBack }) => {
               }
             }}
           />
-          
+
           {/* Confirmation Card */}
           <div
-            className="fixed bg-white rounded-xl shadow-2xl z-50"
+            className="fixed bg-white rounded-lg shadow-2xl z-50"
             style={{
               left: '50%',
               top: '50%',
@@ -1617,17 +1643,17 @@ const Bookmarks = ({ onBack }) => {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-4 sm:p-6 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <div 
+            <div className="p-3 sm:p-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <div
                   className="p-2.5 rounded-lg flex-shrink-0"
                   style={{ backgroundColor: '#FEE2E2' }}
                 >
-                  <Trash2 className="h-5 w-5 text-red-600" />
+                  <Trash2 className="h-4 w-4 text-red-600" />
                 </div>
                 <div>
-                  <h3 
-                    className="text-lg font-semibold text-gray-900"
+                  <h3
+                    className="text-base font-semibold text-gray-900"
                     style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
                   >
                     Delete {deleteType === 'folder' ? 'Folder' : deleteType === 'multiple' ? 'Bookmarks' : 'Bookmark'}?
@@ -1638,27 +1664,27 @@ const Bookmarks = ({ onBack }) => {
                 </div>
               </div>
             </div>
-            
+
             {/* Content */}
-            <div className="p-4 sm:p-6">
+            <div className="p-3 sm:p-3">
               {deleteType === 'multiple' && Array.isArray(deleteItem) ? (
                 <>
                   <p className="text-sm text-gray-700 mb-4">
-                    Are you sure you want to delete <strong>{deleteItem.length} bookmark{deleteItem.length > 1 ? 's' : ''}</strong>? 
+                    Are you sure you want to delete <strong>{deleteItem.length} bookmark{deleteItem.length > 1 ? 's' : ''}</strong>?
                     <br />
                     <span className="text-xs text-gray-500 mt-1 block">This action cannot be undone.</span>
                   </p>
                 </>
               ) : (
                 <p className="text-sm text-gray-700 mb-4">
-                  Are you sure you want to delete <strong>"{deleteItem?.name || 'this item'}"</strong>? 
+                  Are you sure you want to delete <strong>"{deleteItem?.name || 'this item'}"</strong>?
                   {deleteType === 'folder' && ' All bookmarks in this folder will become unfiled.'}
                   {deleteType !== 'folder' && deleteType !== 'multiple' && ' This action cannot be undone.'}
                 </p>
               )}
-              
+
               {/* Actions */}
-              <div className="flex items-center justify-end gap-3">
+              <div className="flex items-center justify-end gap-2">
                 <button
                   onClick={() => {
                     setShowDeleteConfirm(false);
@@ -1666,22 +1692,22 @@ const Bookmarks = ({ onBack }) => {
                     setDeleteType(null);
                   }}
                   disabled={deleting}
-                  className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ fontFamily: 'Roboto, sans-serif' }}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={
-                    deleteType === 'folder' 
-                      ? confirmDeleteFolder 
-                      : deleteType === 'multiple' 
-                        ? confirmDeleteMultiple 
+                    deleteType === 'folder'
+                      ? confirmDeleteFolder
+                      : deleteType === 'multiple'
+                        ? confirmDeleteMultiple
                         : confirmDeleteBookmark
                   }
                   disabled={deleting}
-                  className="px-4 py-2 rounded-lg transition-colors text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ 
+                  className="px-3 py-2 rounded-lg transition-colors text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
                     backgroundColor: deleting ? '#9CA3AF' : '#EF4444',
                     fontFamily: 'Roboto, sans-serif'
                   }}
@@ -1706,3 +1732,4 @@ const Bookmarks = ({ onBack }) => {
 };
 
 export default Bookmarks;
+

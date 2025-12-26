@@ -206,7 +206,7 @@ const BlogSection = () => {
             onClick={goToPrev}
             className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 lg:-translate-x-12 z-20
                        w-12 h-12 lg:w-14 lg:h-14 rounded-full
-                       bg-white shadow-lg border border-gray-200
+                       bg-gray-50 shadow-lg border border-gray-200
                        items-center justify-center
                        transition-all duration-300
                        hover:scale-110 hover:shadow-xl active:scale-95
@@ -261,7 +261,7 @@ const BlogSection = () => {
                       boxShadow: isCenter 
                         ? '0 25px 50px -12px rgba(30, 101, 173, 0.25)' 
                         : '0 10px 25px -10px rgba(0, 0, 0, 0.1)',
-                      border: isCenter ? '2px solid #1E65AD' : '1px solid #E5E7EB',
+                      // border: isCenter ? '2px solid #1E65AD' : '1px solid #E5E7EB',
                       padding: 'clamp(1.25rem, 2.5vw, 1.75rem)',
                       borderRadius: 'clamp(1rem, 2vw, 1.5rem)'
                               }}

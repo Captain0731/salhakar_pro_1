@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
 import ReactMarkdown from 'react-markdown';
-import { 
-  FileText, 
-  Folder, 
-  Plus, 
-  Search, 
+import {
+  FileText,
+  Folder,
+  Plus,
+  Search,
   MoreVertical,
   Edit,
   Trash2,
@@ -21,7 +21,9 @@ import {
   X,
   Save,
   Eye,
-  ArrowLeft
+  ArrowLeft,
+  Grid,
+  List
 } from 'lucide-react';
 
 const Notes = ({ onBack }) => {
@@ -53,10 +55,10 @@ const Notes = ({ onBack }) => {
   const [showCreateFolderDialog, setShowCreateFolderDialog] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
-  
+
   // Selection state for multiple delete
   const [selectedItems, setSelectedItems] = useState([]);
-  
+
   // Delete confirmation modal state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteType, setDeleteType] = useState(null); // 'folder' or 'note' or 'multiple'
@@ -67,7 +69,7 @@ const Notes = ({ onBack }) => {
   useEffect(() => {
     const loadFolders = async () => {
       if (!isAuthenticated) return;
-      
+
       try {
         const response = await apiService.getFolders();
         let foldersData = [];
@@ -118,10 +120,10 @@ const Notes = ({ onBack }) => {
         }
 
         const response = await apiService.getNotes(params);
-        
+
         let notesData = [];
         let paginationData = pagination;
-        
+
         if (response.success && response.data?.notes) {
           notesData = response.data.notes;
           if (response.data.pagination) {
@@ -181,8 +183,8 @@ const Notes = ({ onBack }) => {
         navigate(`/acts/${act.id || note.reference_id}`, { state: { act } });
       } else {
         // For mappings, navigate to law mapping page
-        navigate(`/law-mapping?type=${note.reference_type}`, { 
-          state: { highlightId: note.reference_id } 
+        navigate(`/law-mapping?type=${note.reference_type}`, {
+          state: { highlightId: note.reference_id }
         });
       }
     } catch (error) {
@@ -206,14 +208,14 @@ const Notes = ({ onBack }) => {
       };
 
       await apiService.updateNote(selectedNote.id, noteData);
-      
+
       // Update the note in the list
-      setNotes(prev => prev.map(note => 
-        note.id === selectedNote.id 
+      setNotes(prev => prev.map(note =>
+        note.id === selectedNote.id
           ? { ...note, title: noteTitle, content: noteContent, updated_at: new Date().toISOString() }
           : note
       ));
-      
+
       setIsEditing(false);
       alert('Note saved successfully!');
     } catch (error) {
@@ -251,7 +253,7 @@ const Notes = ({ onBack }) => {
 
   const confirmDeleteNote = async () => {
     if (!deleteItem || deleteType !== 'note') return;
-    
+
     try {
       setDeleting(true);
       await apiService.deleteNote(deleteItem.id);
@@ -274,8 +276,8 @@ const Notes = ({ onBack }) => {
   };
 
   const handleSelectItem = (itemId) => {
-    setSelectedItems(prev => 
-      prev.includes(itemId) 
+    setSelectedItems(prev =>
+      prev.includes(itemId)
         ? prev.filter(id => id !== itemId)
         : [...prev, itemId]
     );
@@ -291,10 +293,10 @@ const Notes = ({ onBack }) => {
 
   const handleDeleteMultiple = () => {
     if (selectedItems.length === 0) return;
-    
+
     // Get the notes to delete
     const notesToDelete = notes.filter(n => selectedItems.includes(n.id));
-    
+
     setDeleteItem(notesToDelete);
     setDeleteType('multiple');
     setShowDeleteConfirm(true);
@@ -302,11 +304,11 @@ const Notes = ({ onBack }) => {
 
   const confirmDeleteMultiple = async () => {
     if (!deleteItem || !Array.isArray(deleteItem) || deleteItem.length === 0) return;
-    
+
     try {
       setDeleting(true);
       const errors = [];
-      
+
       // Delete each note
       for (const note of deleteItem) {
         try {
@@ -316,17 +318,17 @@ const Notes = ({ onBack }) => {
           errors.push({ id: note.id, error: err.message });
         }
       }
-      
+
       // Remove successfully deleted notes from state
       const deletedIds = deleteItem.map(n => n.id).filter(id => !errors.find(e => e.id === id));
       setNotes(prev => prev.filter(note => !deletedIds.includes(note.id)));
       setPagination(prev => ({ ...prev, total: Math.max(0, prev.total - deletedIds.length) }));
       setSelectedItems([]);
-      
+
       if (errors.length > 0) {
         alert(`Failed to delete ${errors.length} note(s). Please try again.`);
       }
-      
+
       // Close modal
       setShowDeleteConfirm(false);
       setDeleteItem(null);
@@ -380,24 +382,24 @@ const Notes = ({ onBack }) => {
 
   const confirmDeleteFolder = async () => {
     if (!deleteItem || deleteType !== 'folder') return;
-    
+
     try {
       setDeleting(true);
       await apiService.deleteFolder(deleteItem.id);
-      
+
       // Remove folder from state
       setFolders(prev => prev.filter(f => f.id !== deleteItem.id));
-      
+
       // If this folder was selected, clear the selection and exit folder view
       if (selectedFolder?.id === deleteItem.id) {
         setSelectedFolder(null);
         setIsFolderView(false);
       }
-      
+
       setShowDeleteConfirm(false);
       setDeleteItem(null);
       setDeleteType(null);
-      
+
       // Reload notes to reflect the change (notes will now be unfiled)
       // The useEffect will automatically reload notes when selectedFolder changes
     } catch (error) {
@@ -489,10 +491,10 @@ const Notes = ({ onBack }) => {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-2 sm:space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-white to-gray-50 rounded-xl border border-gray-200 p-3 sm:p-6 shadow-sm">
-        <div className="flex flex-col gap-2 sm:gap-4">
+      <div className="bg-gradient-to-r from-white to-gray-50 rounded-lg border border-gray-200 p-3 sm:p-3 shadow-sm">
+        <div className="flex flex-col gap-2 sm:gap-2">
           <div className="flex items-center gap-2">
             {/* Mobile Back Button */}
             {onBack && (
@@ -501,11 +503,11 @@ const Notes = ({ onBack }) => {
                 className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
                 aria-label="Back to Dashboard"
               >
-                <ArrowLeft className="h-5 w-5 text-gray-700" />
+                <ArrowLeft className="h-4 w-4 text-gray-700" />
               </button>
             )}
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg sm:text-2xl font-bold mb-0.5 sm:mb-2 truncate" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+              <h1 className="text-base sm:text-base font-bold mb-0.5 sm:mb-2 truncate" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
                 Notes
               </h1>
               <p className="text-gray-600 text-[11px] sm:text-sm line-clamp-1" style={{ fontFamily: 'Roboto, sans-serif' }}>
@@ -517,8 +519,8 @@ const Notes = ({ onBack }) => {
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-2.5 sm:p-4 shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+      <div className="bg-white rounded-lg border border-gray-200 p-2.5 sm:p-3 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400" />
             <input
@@ -541,7 +543,7 @@ const Notes = ({ onBack }) => {
               setPagination(prev => ({ ...prev, page: 1 })); // Reset to first page
               setSelectedItems([]); // Clear selections when filter changes
             }}
-            className="px-2.5 sm:px-4 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-xs sm:text-sm"
+            className="px-2.5 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-xs sm:text-sm"
             style={{ fontFamily: 'Roboto, sans-serif' }}
           >
             <option value="">All Types</option>
@@ -557,34 +559,34 @@ const Notes = ({ onBack }) => {
 
       {/* Folder View Header - Show when folder is selected */}
       {isFolderView && selectedFolder && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 shadow-sm">
-          <div className="flex items-center gap-3 sm:gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-3 shadow-sm">
+          <div className="flex items-center gap-2 sm:gap-2">
             {/* Back Arrow */}
             <button
               onClick={handleBackFromFolder}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
               title="Back to folders"
             >
-              <ArrowLeft className="h-5 w-5 text-gray-600" />
+              <ArrowLeft className="h-4 w-4 text-gray-600" />
             </button>
-            
+
             {/* Folder Icon with Blue Background */}
-            <div 
+            <div
               className="p-2.5 sm:p-3 rounded-lg flex-shrink-0"
               style={{ backgroundColor: '#E8F0F8' }}
             >
-              <Folder className="h-5 w-5 sm:h-6 sm:w-6" style={{ color: '#1E65AD' }} />
+              <Folder className="h-4 w-4 sm:h-6 sm:w-6" style={{ color: '#1E65AD' }} />
             </div>
-            
+
             {/* Folder Name and Note Count */}
             <div className="flex-1 min-w-0">
-              <h2 
-                className="text-base sm:text-lg font-semibold text-gray-900 mb-0.5 sm:mb-1"
+              <h2
+                className="text-base sm:text-base font-semibold text-gray-900 mb-0.5 sm:mb-1"
                 style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
               >
                 {selectedFolder.name}
               </h2>
-              <p 
+              <p
                 className="text-xs sm:text-sm text-gray-500"
                 style={{ fontFamily: 'Roboto, sans-serif' }}
               >
@@ -597,126 +599,123 @@ const Notes = ({ onBack }) => {
 
       {/* Folders Section - Hide when in folder view */}
       {!isFolderView && (
-      <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-6 shadow-sm">
-        <h2 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-4" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
-          Folders
-        </h2>
-        <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
-          {/* New Folder Card */}
-          <div
-            onClick={() => setShowCreateFolderDialog(true)}
-            className="relative flex flex-col items-center justify-center p-2 sm:p-4 rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group hover:shadow-md cursor-pointer"
-          >
-            <div 
-              className="p-1.5 sm:p-3 rounded-lg mb-1 sm:mb-2 transition-transform group-hover:scale-110"
-              style={{ backgroundColor: '#CF9B6320' }}
-            >
-              <FolderPlus 
-                className="h-5 w-5 sm:h-8 sm:w-8" 
-                style={{ color: '#CF9B63' }}
-              />
-            </div>
-            <h3 className="font-medium text-gray-900 text-[10px] sm:text-sm text-center group-hover:text-blue-700 mb-0.5 sm:mb-1 leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
-              New Folder
-            </h3>
-            <p className="text-[9px] sm:text-xs text-gray-500 leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
-              Create new
-            </p>
-          </div>
-          
-          {folders.map((folder) => (
+        <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-3 shadow-sm">
+          <h2 className="text-sm sm:text-base font-semibold mb-2 sm:mb-4" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+            Folders
+          </h2>
+          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2">
+            {/* New Folder Card */}
             <div
-              key={folder.id}
-              onClick={() => handleFolderClick(folder)}
-              className={`relative flex flex-col items-center p-2 sm:p-4 rounded-xl border-2 border-dashed cursor-pointer transition-all duration-200 hover:shadow-md group ${
-                selectedFolder?.id === folder.id ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'
-              }`}
+              onClick={() => setShowCreateFolderDialog(true)}
+              className="relative flex flex-col items-center justify-center p-2 sm:p-3 rounded-lg border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group hover:shadow-md cursor-pointer"
             >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  handleDeleteFolder(folder.id, e);
-                }}
-                className="absolute top-1 right-1 sm:top-2 sm:right-2 p-1 sm:p-1.5 rounded hover:bg-red-100 flex-shrink-0 transition-colors z-10"
-                title="Delete folder"
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
-              </button>
-              <div 
+              <div
                 className="p-1.5 sm:p-3 rounded-lg mb-1 sm:mb-2 transition-transform group-hover:scale-110"
-                style={{ backgroundColor: '#1E65AD20' }}
+                style={{ backgroundColor: '#CF9B6320' }}
               >
-                <Folder className="h-5 w-5 sm:h-8 sm:w-8" style={{ color: '#1E65AD' }} />
+                <FolderPlus
+                  className="h-4 w-4 sm:h-8 sm:w-8"
+                  style={{ color: '#CF9B63' }}
+                />
               </div>
-              <h3 className="font-medium text-gray-900 text-[10px] sm:text-sm text-center group-hover:text-blue-700 mb-0.5 sm:mb-1 truncate w-full px-0.5 leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                {folder.name}
+              <h3 className="font-medium text-gray-900 text-[10px] sm:text-sm text-center group-hover:text-blue-700 mb-0.5 sm:mb-1 leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                New Folder
               </h3>
               <p className="text-[9px] sm:text-xs text-gray-500 leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
-                {getFolderNotes(folder.id).length} notes
+                Create new
               </p>
             </div>
-          ))}
+
+            {folders.map((folder) => (
+              <div
+                key={folder.id}
+                onClick={() => handleFolderClick(folder)}
+                className={`relative flex flex-col items-center p-2 sm:p-3 rounded-lg border-2 border-dashed cursor-pointer transition-all duration-200 hover:shadow-md group ${selectedFolder?.id === folder.id ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'
+                  }`}
+              >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    handleDeleteFolder(folder.id, e);
+                  }}
+                  className="absolute top-1 right-1 sm:top-2 sm:right-2 p-1 sm:p-1.5 rounded hover:bg-red-100 flex-shrink-0 transition-colors z-10"
+                  title="Delete folder"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
+                </button>
+                <div
+                  className="p-1.5 sm:p-3 rounded-lg mb-1 sm:mb-2 transition-transform group-hover:scale-110"
+                  style={{ backgroundColor: '#1E65AD20' }}
+                >
+                  <Folder className="h-4 w-4 sm:h-8 sm:w-8" style={{ color: '#1E65AD' }} />
+                </div>
+                <h3 className="font-medium text-gray-900 text-[10px] sm:text-sm text-center group-hover:text-blue-700 mb-0.5 sm:mb-1 truncate w-full px-0.5 leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                  {folder.name}
+                </h3>
+                <p className="text-[9px] sm:text-xs text-gray-500 leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                  {getFolderNotes(folder.id).length} notes
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
       )}
 
       {/* Notes Section */}
-      <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-6 shadow-sm">
+      <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-3 shadow-sm">
         <div className="flex items-center justify-between mb-2 sm:mb-4 gap-2">
-          <h2 className="text-sm sm:text-lg font-semibold truncate flex-1 min-w-0" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+          <h2 className="text-sm sm:text-base font-semibold truncate flex-1 min-w-0" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
             {isFolderView ? (
-              <span className="text-xs sm:text-lg">{selectedFolder?.name} ({pagination.total})</span>
+              <span className="text-xs sm:text-base">{selectedFolder?.name} ({pagination.total})</span>
             ) : (
               <>
                 <span className="hidden sm:inline">{selectedFolder ? `${selectedFolder.name} Notes` : 'All Notes'}</span>
                 <span className="sm:hidden text-xs">{selectedFolder ? selectedFolder.name : 'All Notes'}</span>
-                <span className="ml-1 sm:ml-2 text-xs sm:text-lg">({pagination.total})</span>
+                <span className="ml-1 sm:ml-2 text-xs sm:text-base">({pagination.total})</span>
               </>
             )}
           </h2>
           <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-1 sm:p-2 rounded-lg transition-colors ${
-                viewMode === 'grid' ? 'bg-blue-100' : 'hover:bg-gray-100'
-              }`}
+              className={`p-1 sm:p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-blue-100' : 'hover:bg-gray-100'
+                }`}
               style={{ color: viewMode === 'grid' ? '#1E65AD' : '#6B7280' }}
               title="Grid View"
             >
-              <FileText className="h-3.5 w-3.5 sm:h-5 sm:w-5" />
+              <Grid className="h-3.5 w-3.5 sm:h-5 sm:w-5" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1 sm:p-2 rounded-lg transition-colors ${
-                viewMode === 'list' ? 'bg-blue-100' : 'hover:bg-gray-100'
-              }`}
+              className={`p-1 sm:p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-blue-100' : 'hover:bg-gray-100'
+                }`}
               style={{ color: viewMode === 'list' ? '#1E65AD' : '#6B7280' }}
               title="List View"
             >
-              <FileText className="h-3.5 w-3.5 sm:h-5 sm:w-5" />
+              <List className="h-3.5 w-3.5 sm:h-5 sm:w-5" />
             </button>
           </div>
         </div>
 
         {selectedItems.length > 0 && (
-          <div className="p-2.5 sm:p-4 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200 mb-2 sm:mb-4 rounded-t-lg">
+          <div className="p-2.5 sm:p-3 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200 mb-2 sm:mb-4 rounded-t-lg">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
               <span className="text-[11px] sm:text-sm font-medium text-blue-800" style={{ fontFamily: 'Roboto, sans-serif' }}>
                 {selectedItems.length} item{selectedItems.length > 1 ? 's' : ''} selected
               </span>
               <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-                <button 
+                <button
                   onClick={handleSelectAll}
-                  className="flex-1 sm:flex-initial px-2.5 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
+                  className="flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
                   style={{ fontFamily: 'Roboto, sans-serif' }}
                 >
                   {selectedItems.length === notes.length ? 'Deselect All' : 'Select All'}
                 </button>
-                <button 
+                <button
                   onClick={handleDeleteMultiple}
-                  className="flex-1 sm:flex-initial px-2.5 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-sm"
+                  className="flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-sm"
                   style={{ fontFamily: 'Roboto, sans-serif' }}
                 >
                   Delete Selected
@@ -741,7 +740,7 @@ const Notes = ({ onBack }) => {
             </p>
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-2">
             {notes.map((note) => {
               const folder = folders.find(f => f.id === note.folder_id);
               const colors = getReferenceTypeColors(note.reference_type);
@@ -755,25 +754,24 @@ const Notes = ({ onBack }) => {
                     }
                     handleNoteClick(note);
                   }}
-                  className={`p-3 sm:p-4 md:p-5 rounded-lg sm:rounded-xl border cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 bg-white relative overflow-visible ${
-                    selectedItems.includes(note.id) ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200'
-                  }`}
+                  className={`p-2.5 sm:p-2.5 md:p-2.5 rounded-lg sm:rounded-lg border cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 bg-white relative overflow-visible ${selectedItems.includes(note.id) ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200'
+                    }`}
                 >
                   {/* Selection Checkbox */}
                   <input
                     type="checkbox"
                     checked={selectedItems.includes(note.id)}
                     onChange={() => handleSelectItem(note.id)}
-                    className="absolute top-2 left-2 sm:top-3 sm:left-3 w-4 h-4 sm:w-5 sm:h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer z-50 bg-white shadow-md"
+                    className="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 w-4 h-4 sm:w-4 sm:h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer z-50 bg-white shadow-md"
                     onClick={(e) => e.stopPropagation()}
                     style={{ zIndex: 50 }}
                   />
-                  <div className="flex items-start justify-between mb-2 sm:mb-3 gap-2 pl-6 sm:pl-7">
+                  <div className="flex items-start justify-between mb-1.5 sm:mb-2 gap-2 pl-6 sm:pl-6">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                        <span 
-                          className="px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap" 
-                          style={{ 
+                        <span
+                          className="px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap"
+                          style={{
                             fontFamily: 'Roboto, sans-serif',
                             backgroundColor: colors.badgeBg,
                             color: colors.badgeText
@@ -782,10 +780,10 @@ const Notes = ({ onBack }) => {
                           {getReferenceTypeLabel(note.reference_type)}
                         </span>
                       </div>
-                      <h3 className="font-semibold text-gray-900 mb-1.5 sm:mb-2 line-clamp-2 text-sm sm:text-base leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                      <h3 className="font-semibold text-gray-900 mb-1 sm:mb-1.5 line-clamp-2 text-xs sm:text-sm leading-tight" style={{ fontFamily: 'Roboto, sans-serif' }}>
                         {note.title}
                       </h3>
-                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-3 mb-2 sm:mb-3 leading-relaxed" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                      <p className="text-[11px] sm:text-xs text-gray-600 line-clamp-3 mb-1.5 sm:mb-2 leading-relaxed" style={{ fontFamily: 'Roboto, sans-serif' }}>
                         {note.content?.substring(0, 120) || 'No content'}...
                       </p>
                     </div>
@@ -795,14 +793,14 @@ const Notes = ({ onBack }) => {
                           e.stopPropagation();
                           handleDeleteNote(note.id, e);
                         }}
-                        className="p-1 sm:p-1.5 rounded hover:bg-red-100 transition-colors"
+                        className="p-1 sm:p-1 rounded hover:bg-red-100 transition-colors"
                         title="Delete note"
                       >
-                        <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
+                        <Trash2 className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5 text-red-500" />
                       </button>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center justify-between mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 gap-2">
                     <div className="flex items-center space-x-1.5 sm:space-x-2 min-w-0 flex-1">
                       {folder ? (
@@ -828,10 +826,10 @@ const Notes = ({ onBack }) => {
             })}
           </div>
         ) : (
-          <div className="space-y-2 sm:space-y-3">
+          <div className="space-y-2 sm:space-y-2">
             {/* List View Header with Select All */}
             {notes.length > 0 && (
-              <div className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 py-2 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+              <div className="flex items-center gap-2 sm:gap-2 px-2.5 sm:px-3 py-2 border-b border-gray-200 bg-gray-50 rounded-t-lg">
                 <input
                   type="checkbox"
                   checked={selectedItems.length === notes.length && notes.length > 0}
@@ -856,9 +854,8 @@ const Notes = ({ onBack }) => {
                     }
                     handleNoteClick(note);
                   }}
-                  className={`p-2.5 sm:p-4 rounded-lg border cursor-pointer transition-all duration-200 hover:shadow-md flex items-start sm:items-center justify-between gap-2 sm:gap-3 ${
-                    selectedItems.includes(note.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200 hover:bg-gray-50'
-                  }`}
+                  className={`p-2.5 sm:p-3 rounded-lg border cursor-pointer transition-all duration-200 hover:shadow-md flex items-start sm:items-center justify-between gap-2 sm:gap-2 ${selectedItems.includes(note.id) ? 'bg-blue-50 border-blue-500' : 'border-gray-200 hover:bg-gray-50'
+                    }`}
                 >
                   {/* Selection Checkbox */}
                   <input
@@ -869,7 +866,7 @@ const Notes = ({ onBack }) => {
                     onClick={(e) => e.stopPropagation()}
                   />
                   <div className="flex items-start sm:items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
-                    <div 
+                    <div
                       className="p-1.5 sm:p-2.5 rounded-lg flex-shrink-0"
                       style={{ backgroundColor: colors.badgeBg }}
                     >
@@ -877,9 +874,9 @@ const Notes = ({ onBack }) => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-                        <span 
-                          className="px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap" 
-                          style={{ 
+                        <span
+                          className="px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium whitespace-nowrap"
+                          style={{
                             fontFamily: 'Roboto, sans-serif',
                             backgroundColor: colors.badgeBg,
                             color: colors.badgeText
@@ -894,7 +891,7 @@ const Notes = ({ onBack }) => {
                       <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 sm:line-clamp-1 mb-1.5 sm:mb-2 leading-relaxed" style={{ fontFamily: 'Roboto, sans-serif' }}>
                         {note.content?.substring(0, 80) || 'No content'}...
                       </p>
-                      <div className="flex items-center flex-wrap gap-1.5 sm:gap-3 text-[10px] sm:text-xs text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                      <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-500" style={{ fontFamily: 'Roboto, sans-serif' }}>
                         {folder ? (
                           <span className="flex items-center space-x-0.5 sm:space-x-1">
                             <Folder className="h-3 w-3 flex-shrink-0" />
@@ -964,17 +961,17 @@ const Notes = ({ onBack }) => {
       {showNotePopup && selectedNote && (
         <>
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black bg-opacity-50 z-50"
             onClick={() => {
               setShowNotePopup(false);
               setIsEditing(false);
             }}
           />
-          
+
           {/* Popup */}
           <div
-            className="fixed bg-white rounded-lg sm:rounded-xl shadow-2xl z-50 flex flex-col w-[95vw] sm:w-[90vw] max-w-[800px] max-h-[95vh] sm:max-h-[90vh]"
+            className="fixed bg-white rounded-lg sm:rounded-lg shadow-2xl z-50 flex flex-col w-[95vw] sm:w-[90vw] max-w-[800px] max-h-[95vh] sm:max-h-[90vh]"
             style={{
               left: '50%',
               top: '50%',
@@ -984,9 +981,9 @@ const Notes = ({ onBack }) => {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div 
-              className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 flex-shrink-0"
-              style={{ 
+            <div
+              className="flex items-center justify-between p-3 sm:p-3 border-b border-gray-200 flex-shrink-0"
+              style={{
                 background: 'linear-gradient(90deg, #1E65AD 0%, #CF9B63 100%)',
                 borderTopLeftRadius: '0.5rem',
                 borderTopRightRadius: '0.5rem'
@@ -1005,7 +1002,7 @@ const Notes = ({ onBack }) => {
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <h3 className="text-sm sm:text-lg font-bold text-white truncate" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+                  <h3 className="text-sm sm:text-base font-bold text-white truncate" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
                     {noteTitle || 'Untitled Note'}
                   </h3>
                 )}
@@ -1053,14 +1050,14 @@ const Notes = ({ onBack }) => {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-2.5 sm:p-4" style={{ minHeight: '200px', maxHeight: 'calc(95vh - 180px)' }}>
+            <div className="flex-1 overflow-y-auto p-2.5 sm:p-3" style={{ minHeight: '200px', maxHeight: 'calc(95vh - 180px)' }}>
               {isEditing ? (
                 <textarea
                   value={noteContent}
                   onChange={(e) => setNoteContent(e.target.value)}
                   placeholder="Write your notes here... (Markdown supported)"
-                  className="w-full h-full p-2.5 sm:p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[250px] sm:min-h-[400px]"
-                  style={{ 
+                  className="w-full h-full p-2.5 sm:p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[200px] sm:min-h-[300px]"
+                  style={{
                     fontFamily: 'Roboto, sans-serif',
                     fontSize: '13px',
                     lineHeight: '1.6'
@@ -1068,14 +1065,14 @@ const Notes = ({ onBack }) => {
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <div className="prose prose-sm max-w-none p-2.5 sm:p-4 text-sm sm:text-base" style={{ fontFamily: 'Roboto, sans-serif' }}>
+                <div className="prose prose-sm max-w-none p-2.5 sm:p-3 text-sm sm:text-base" style={{ fontFamily: 'Roboto, sans-serif' }}>
                   <ReactMarkdown>{noteContent || '*No content*'}</ReactMarkdown>
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-2.5 sm:p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0 gap-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-2.5 sm:p-3 border-t border-gray-200 bg-gray-50 flex-shrink-0 gap-2">
               <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-600" style={{ fontFamily: 'Roboto, sans-serif' }}>
                 <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
                 <span className="truncate">Updated: {new Date(selectedNote.updated_at || selectedNote.updatedAt).toLocaleString()}</span>
@@ -1090,7 +1087,7 @@ const Notes = ({ onBack }) => {
                         setNoteContent(selectedNote.content || '');
                         setNoteTitle(selectedNote.title || '');
                       }}
-                      className="flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 sm:py-2 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium text-xs sm:text-sm"
+                      className="flex-1 sm:flex-initial px-3 sm:px-3 py-1.5 sm:py-2 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium text-xs sm:text-sm"
                       style={{ fontFamily: 'Roboto, sans-serif' }}
                       disabled={savingNote}
                     >
@@ -1101,7 +1098,7 @@ const Notes = ({ onBack }) => {
                         e.stopPropagation();
                         handleSaveNote();
                       }}
-                      className="flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2"
+                      className="flex-1 sm:flex-initial px-3 sm:px-3 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2"
                       style={{ fontFamily: 'Roboto, sans-serif' }}
                       disabled={savingNote}
                     >
@@ -1115,7 +1112,7 @@ const Notes = ({ onBack }) => {
                       e.stopPropagation();
                       handleNavigateToReference(selectedNote);
                     }}
-                    className="w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2"
+                    className="w-full sm:w-auto px-3 sm:px-3 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2"
                     style={{ fontFamily: 'Roboto, sans-serif' }}
                   >
                     <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -1132,14 +1129,14 @@ const Notes = ({ onBack }) => {
       {showCreateFolderDialog && (
         <>
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black bg-opacity-50 z-50"
             onClick={() => {
               setShowCreateFolderDialog(false);
               setNewFolderName('');
             }}
           />
-          
+
           {/* Dialog */}
           <div
             className="fixed bg-white rounded-lg shadow-2xl z-50"
@@ -1155,11 +1152,11 @@ const Notes = ({ onBack }) => {
           >
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+              <h3 className="text-base font-semibold text-gray-900" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
                 Create New Folder
               </h3>
             </div>
-            
+
             {/* Content */}
             <div className="px-6 py-4">
               <input
@@ -1172,21 +1169,21 @@ const Notes = ({ onBack }) => {
                   }
                 }}
                 placeholder="Folder name"
-                className="w-full px-4 py-2.5 border-2 border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                className="w-full px-3 py-2.5 border-2 border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 style={{ fontFamily: 'Roboto, sans-serif' }}
                 autoFocus
               />
             </div>
-            
+
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
               <button
                 onClick={() => {
                   setShowCreateFolderDialog(false);
                   setNewFolderName('');
                 }}
                 disabled={creatingFolder}
-                className="px-4 py-2 rounded-lg font-medium text-sm transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 rounded-lg font-medium text-sm transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ fontFamily: 'Roboto, sans-serif' }}
               >
                 Cancel
@@ -1194,8 +1191,8 @@ const Notes = ({ onBack }) => {
               <button
                 onClick={handleCreateFolder}
                 disabled={creatingFolder || !newFolderName.trim()}
-                className="px-4 py-2 rounded-lg font-medium text-sm transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ 
+                className="px-3 py-2 rounded-lg font-medium text-sm transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
                   fontFamily: 'Roboto, sans-serif',
                   backgroundColor: creatingFolder || !newFolderName.trim() ? '#9CA3AF' : '#1E65AD'
                 }}
@@ -1211,7 +1208,7 @@ const Notes = ({ onBack }) => {
       {showDeleteConfirm && deleteItem && (
         <>
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black bg-opacity-50 z-50"
             onClick={() => {
               if (!deleting) {
@@ -1221,10 +1218,10 @@ const Notes = ({ onBack }) => {
               }
             }}
           />
-          
+
           {/* Confirmation Card */}
           <div
-            className="fixed bg-white rounded-xl shadow-2xl z-50"
+            className="fixed bg-white rounded-lg shadow-2xl z-50"
             style={{
               left: '50%',
               top: '50%',
@@ -1236,17 +1233,17 @@ const Notes = ({ onBack }) => {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-4 sm:p-6 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <div 
+            <div className="p-3 sm:p-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <div
                   className="p-2.5 rounded-lg flex-shrink-0"
                   style={{ backgroundColor: '#FEE2E2' }}
                 >
-                  <Trash2 className="h-5 w-5 text-red-600" />
+                  <Trash2 className="h-4 w-4 text-red-600" />
                 </div>
                 <div>
-                  <h3 
-                    className="text-lg font-semibold text-gray-900"
+                  <h3
+                    className="text-base font-semibold text-gray-900"
                     style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
                   >
                     Delete {deleteType === 'folder' ? 'Folder' : deleteType === 'multiple' ? 'Notes' : 'Note'}?
@@ -1257,27 +1254,27 @@ const Notes = ({ onBack }) => {
                 </div>
               </div>
             </div>
-            
+
             {/* Content */}
-            <div className="p-4 sm:p-6">
+            <div className="p-3 sm:p-3">
               {deleteType === 'multiple' && Array.isArray(deleteItem) ? (
                 <>
                   <p className="text-sm text-gray-700 mb-4">
-                    Are you sure you want to delete <strong>{deleteItem.length} note{deleteItem.length > 1 ? 's' : ''}</strong>? 
+                    Are you sure you want to delete <strong>{deleteItem.length} note{deleteItem.length > 1 ? 's' : ''}</strong>?
                     <br />
                     <span className="text-xs text-gray-500 mt-1 block">This action cannot be undone.</span>
                   </p>
                 </>
               ) : (
                 <p className="text-sm text-gray-700 mb-4">
-                  Are you sure you want to delete <strong>"{deleteItem?.name || 'this item'}"</strong>? 
+                  Are you sure you want to delete <strong>"{deleteItem?.name || 'this item'}"</strong>?
                   {deleteType === 'folder' && ' All notes in this folder will become unfiled.'}
                   {deleteType !== 'folder' && deleteType !== 'multiple' && ' This action cannot be undone.'}
                 </p>
               )}
-              
+
               {/* Actions */}
-              <div className="flex items-center justify-end gap-3">
+              <div className="flex items-center justify-end gap-2">
                 <button
                   onClick={() => {
                     setShowDeleteConfirm(false);
@@ -1285,22 +1282,22 @@ const Notes = ({ onBack }) => {
                     setDeleteType(null);
                   }}
                   disabled={deleting}
-                  className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ fontFamily: 'Roboto, sans-serif' }}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={
-                    deleteType === 'folder' 
-                      ? confirmDeleteFolder 
-                      : deleteType === 'multiple' 
-                        ? confirmDeleteMultiple 
+                    deleteType === 'folder'
+                      ? confirmDeleteFolder
+                      : deleteType === 'multiple'
+                        ? confirmDeleteMultiple
                         : confirmDeleteNote
                   }
                   disabled={deleting}
-                  className="px-4 py-2 rounded-lg transition-colors text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ 
+                  className="px-3 py-2 rounded-lg transition-colors text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
                     backgroundColor: deleting ? '#9CA3AF' : '#EF4444',
                     fontFamily: 'Roboto, sans-serif'
                   }}

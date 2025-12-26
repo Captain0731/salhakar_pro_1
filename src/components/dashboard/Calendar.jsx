@@ -331,9 +331,9 @@ const Calendar = ({ onBack }) => {
   const selectedDateEvents = selectedDate ? getEventsForDate(selectedDate) : [];
 
   return (
-    <div className="space-y-4 sm:space-y-6 pt-4 sm:pt-6">
+    <div className="space-y-2 sm:space-y-6 pt-4 sm:pt-6">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:gap-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:gap-0 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 sm:gap-0">
           {/* Mobile Back Button */}
           {onBack && (
@@ -342,11 +342,11 @@ const Calendar = ({ onBack }) => {
               className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors mr-2"
               aria-label="Back to Dashboard"
             >
-              <ArrowLeft className="h-5 w-5 text-gray-700" />
+              <ArrowLeft className="h-4 w-4 text-gray-700" />
             </button>
           )}
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>Calendar</h1>
+            <h1 className="text-base sm:text-base font-bold" style={{ color: '#1E65AD', fontFamily: "'Bricolage Grotesque', sans-serif" }}>Calendar</h1>
             <p className="mt-1 text-xs sm:text-sm" style={{ color: '#8C969F', fontFamily: 'Roboto, sans-serif' }}>
               Manage your legal events, deadlines, and reminders
             </p>
@@ -356,7 +356,7 @@ const Calendar = ({ onBack }) => {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:space-x-3 sm:gap-0">
           <button
             onClick={() => setShowAddEvent(true)}
-            className="flex items-center justify-center px-3 sm:px-4 py-2 text-white rounded-lg transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 text-xs sm:text-sm"
+            className="flex items-center justify-center px-3 sm:px-3 py-2 text-white rounded-lg transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 text-xs sm:text-sm"
             style={{ backgroundColor: '#1E65AD', fontFamily: 'Roboto, sans-serif' }}
           >
             <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
@@ -367,16 +367,16 @@ const Calendar = ({ onBack }) => {
 
       {/* Pinned Events */}
       {events.filter(event => event.pinned).length > 0 && (
-        <div className="bg-white rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200">
-          <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center">
+        <div className="bg-white rounded-lg p-3 sm:p-3 shadow-sm border border-gray-200">
+          <h2 className="text-base sm:text-base font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center">
             <Pin className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-red-500" />
             Pinned Events
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2">
             {events.filter(event => event.pinned).map((event) => (
               <div
                 key={event.id}
-                className={`p-3 sm:p-4 rounded-lg border-2 ${getEventTypeColor(event.type)} ${
+                className={`p-3 sm:p-3 rounded-lg border-2 ${getEventTypeColor(event.type)} ${
                   event.completed ? 'opacity-60' : ''
                 }`}
               >
@@ -441,8 +441,8 @@ const Calendar = ({ onBack }) => {
       {viewMode === 'month' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           {/* Calendar Header */}
-          <div className="flex items-center justify-between p-3 sm:p-4 md:p-6 border-b border-gray-200">
-            <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 truncate">
+          <div className="flex items-center justify-between p-3 sm:p-3 md:p-3 border-b border-gray-200">
+            <h2 className="text-base sm:text-base md:text-base font-semibold text-gray-900 truncate">
               {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
             </h2>
             <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
@@ -468,7 +468,7 @@ const Calendar = ({ onBack }) => {
           </div>
 
           {/* Calendar Grid */}
-          <div className="p-2 sm:p-4 md:p-6">
+          <div className="p-2 sm:p-3 md:p-3">
             {/* Day Headers */}
             <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-2 sm:mb-4">
               {dayNames.map((day) => (
@@ -530,9 +530,9 @@ const Calendar = ({ onBack }) => {
       {/* Selected Date Events */}
       {selectedDate && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-4 sm:p-6">
+          <div className="p-3 sm:p-3">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h2 className="text-base sm:text-lg font-semibold text-gray-900">
+              <h2 className="text-base sm:text-base font-semibold text-gray-900">
                 Events for <span className="text-sm sm:text-base">{formatDate(selectedDate)}</span>
               </h2>
               <button
@@ -561,7 +561,7 @@ const Calendar = ({ onBack }) => {
                     }));
                     setShowAddEvent(true);
                   }}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm text-white rounded-lg transition-all duration-200 hover:shadow-lg"
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm text-white rounded-lg transition-all duration-200 hover:shadow-lg"
                   style={{ backgroundColor: '#1E65AD', fontFamily: 'Roboto, sans-serif' }}
                 >
                   <Plus className="h-4 w-4" />
@@ -569,11 +569,11 @@ const Calendar = ({ onBack }) => {
                 </button>
               </div>
             ) : (
-              <div className="space-y-2 sm:space-y-3">
+              <div className="space-y-2 sm:space-y-2">
                 {selectedDateEvents.map((event) => (
                   <div
                     key={event.id}
-                    className={`p-3 sm:p-4 rounded-lg border ${getEventTypeColor(event.type)} ${
+                    className={`p-3 sm:p-3 rounded-lg border ${getEventTypeColor(event.type)} ${
                       event.completed ? 'opacity-60' : ''
                     }`}
                   >
@@ -642,7 +642,7 @@ const Calendar = ({ onBack }) => {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg">
           <p className="text-sm">{error}</p>
           <button
             onClick={() => setError(null)}
@@ -656,20 +656,20 @@ const Calendar = ({ onBack }) => {
       {/* Loading Indicator */}
       {loading && (
         <div className="flex items-center justify-center py-4">
-          <Loader2 className="h-6 w-6 animate-spin" style={{ color: '#1E65AD' }} />
+          <Loader2 className="h-4 w-4 animate-spin" style={{ color: '#1E65AD' }} />
           <span className="ml-2 text-sm text-gray-600">Loading events...</span>
         </div>
       )}
 
       {/* Add/Edit Event Modal */}
       {showAddEvent && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-3">
+          <div className="bg-white rounded-lg p-3 sm:p-3 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h3 className="text-base sm:text-base font-semibold text-gray-900 mb-3 sm:mb-4">
               {editingEvent ? 'Edit Event' : 'Add New Event'}
             </h3>
             
-            <div className="space-y-3 sm:space-y-4">
+            <div className="space-y-2 sm:space-y-2">
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Event Title
@@ -696,7 +696,7 @@ const Calendar = ({ onBack }) => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2">
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                     Date
@@ -788,14 +788,14 @@ const Calendar = ({ onBack }) => {
                     reminderTime: '15'
                   });
                 }}
-                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 w-full sm:w-auto disabled:opacity-50"
+                className="px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 w-full sm:w-auto disabled:opacity-50"
                 disabled={loading}
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddEvent}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full sm:w-auto disabled:opacity-50 flex items-center justify-center"
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full sm:w-auto disabled:opacity-50 flex items-center justify-center"
                 disabled={loading}
                 style={{ backgroundColor: '#1E65AD' }}
               >
@@ -826,7 +826,7 @@ const Calendar = ({ onBack }) => {
             }}
           />
           <div
-            className="fixed bg-white rounded-xl shadow-2xl z-50"
+            className="fixed bg-white rounded-lg shadow-2xl z-50"
             style={{
               left: '50%',
               top: '50%',
@@ -838,17 +838,17 @@ const Calendar = ({ onBack }) => {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-4 sm:p-6 border-b border-gray-200">
-              <div className="flex items-center gap-3">
+            <div className="p-3 sm:p-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
                 <div 
                   className="p-2.5 rounded-lg flex-shrink-0"
                   style={{ backgroundColor: '#FEE2E2' }}
                 >
-                  <Trash2 className="h-5 w-5 text-red-600" />
+                  <Trash2 className="h-4 w-4 text-red-600" />
                 </div>
                 <div>
                   <h3 
-                    className="text-lg font-semibold text-gray-900"
+                    className="text-base font-semibold text-gray-900"
                     style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
                   >
                     Delete Event?
@@ -861,21 +861,21 @@ const Calendar = ({ onBack }) => {
             </div>
             
             {/* Content */}
-            <div className="p-4 sm:p-6">
+            <div className="p-3 sm:p-3">
               <p className="text-sm text-gray-700 mb-4">
                 Are you sure you want to delete <strong>"{eventToDelete?.title || 'this event'}"</strong>? 
                 <span className="text-xs text-gray-500"> This action cannot be undone.</span>
               </p>
               
               {/* Actions */}
-              <div className="flex items-center justify-end gap-3">
+              <div className="flex items-center justify-end gap-2">
                 <button
                   onClick={() => {
                     setShowDeleteConfirm(false);
                     setEventToDelete(null);
                   }}
                   disabled={deleting}
-                  className="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ fontFamily: 'Roboto, sans-serif' }}
                 >
                   Cancel
@@ -883,7 +883,7 @@ const Calendar = ({ onBack }) => {
                 <button
                   onClick={confirmDeleteEvent}
                   disabled={deleting}
-                  className="px-4 py-2 rounded-lg transition-colors text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 rounded-lg transition-colors text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ 
                     backgroundColor: deleting ? '#9CA3AF' : '#EF4444',
                     fontFamily: 'Roboto, sans-serif'

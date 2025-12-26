@@ -430,7 +430,7 @@ export default function Signup() {
                 }}
               >
                 {/* Animated Background Pattern */}
-              <div className="absolute inset-0 opacity-10">
+              {/* <div className="absolute inset-0 opacity-10">
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
@@ -441,7 +441,7 @@ export default function Signup() {
                     transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
                     className="absolute bottom-10 right-10 w-24 h-24 border-2 border-white rounded-full"
                   />
-                </div>
+                </div> */}
 
                 <div className="relative z-10 text-center w-full">
                   <motion.div
@@ -451,7 +451,7 @@ export default function Signup() {
                     className="mb-8"
                   >
                     <img
-                      src="/salahakar .PNG"
+                      src="/main4.PNG"
                       alt="सलहाकार Logo"
                       className="mx-auto max-w-[140px] sm:max-w-[180px] lg:max-w-[220px] h-auto object-contain drop-shadow-2xl"
                     />
