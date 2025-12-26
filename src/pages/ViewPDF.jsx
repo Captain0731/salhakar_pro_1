@@ -2010,7 +2010,7 @@ export default function ViewPDF() {
                 </div>
                 
                 {/* PDF/Markdown Content */}
-                <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0, height: '100%' }}>
+                <div className="flex-1 overflow-hidden relative" style={{ minHeight: isMobile ? '500px' : 0, height: isMobile ? 'auto' : '100%' }}>
                   {showMarkdown ? (
                     /* Markdown View */
                     <div 
@@ -2423,7 +2423,7 @@ export default function ViewPDF() {
                     </div>
                   ) : pdfUrl && pdfUrl.trim() !== "" ? (
                     /* PDF View */
-                  <div className="relative h-full w-full pdf-scrollbar-container" style={{ minHeight: isMobile ? '400px' : '350px', display: 'flex', flexDirection: 'column' }}>
+                  <div className="relative w-full pdf-scrollbar-container" style={{ minHeight: isMobile ? '500px' : '350px', height: isMobile ? '500px' : '100%', display: 'flex', flexDirection: 'column' }}>
                     <style>{`
                       /* Container scrollbar styling */
                       .pdf-scrollbar-container::-webkit-scrollbar {
@@ -2519,51 +2519,54 @@ export default function ViewPDF() {
                       }
                     `}</style>
                     {/* PDF Embed - Display inline for both mobile and desktop */}
-                    <div className="w-full h-full flex-1" style={{ minHeight: isMobile ? '400px' : '350px', position: 'relative' }}>
-                      <iframe
-                        src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1&page=${currentPage}&zoom=${isMobile ? 'page-width' : 'page-fit'}&view=FitH`}
-                        className="absolute inset-0 w-full h-full border-0 rounded-lg"
-                        title={location.state?.act ? 'Act PDF' : 'Judgment PDF'}
-                        style={{ 
-                          width: '100%', 
-                          height: '100%',
-                          display: 'block',
-                          minHeight: isMobile ? '400px' : '350px'
-                        }}
-                        allow="fullscreen"
-                        scrolling="auto"
-                        onLoad={() => {
-                          setLoading(false);
-                          setError("");
-                        }}
-                        onError={() => {
-                          // On error, try to reload or show embedded view
-                          console.warn('PDF iframe error, trying alternative display');
-                          setError("");
-                        }}
-                      />
-                      
-                      {/* Alternative: Use object tag as fallback for mobile */}
-                      {isMobile && (
-                        <object
-                          data={pdfUrl}
-                          type="application/pdf"
-                          className="absolute inset-0 w-full h-full border-0 rounded-lg"
-                          style={{
-                            width: '100%',
+                    <div className="w-full flex-1" style={{ minHeight: isMobile ? '500px' : '350px', height: isMobile ? '500px' : '100%', position: 'relative' }}>
+                      {/* Mobile: Show PDF viewer with better visibility */}
+                      {isMobile ? (
+                        <iframe
+                          src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1&page=${currentPage}&zoom=page-width&view=FitH`}
+                          className="w-full h-full border-0 rounded-lg"
+                          title={location.state?.act ? 'Act PDF' : 'Judgment PDF'}
+                          style={{ 
+                            width: '100%', 
                             height: '100%',
-                            minHeight: '400px',
-                            display: 'none'
+                            minHeight: '500px',
+                            display: 'block',
+                            border: '1px solid #e5e7eb'
                           }}
-                          aria-label={location.state?.act ? 'Act PDF' : 'Judgment PDF'}
-                        >
-                          <p className="text-center p-4 text-gray-600">
-                            Your browser does not support PDFs. 
-                            <a href={pdfUrl} target="_self" className="text-blue-600 underline ml-1">
-                              Click here to view
-                            </a>
-                          </p>
-                        </object>
+                          allow="fullscreen"
+                          scrolling="auto"
+                          onLoad={() => {
+                            setLoading(false);
+                            setError("");
+                          }}
+                          onError={() => {
+                            console.warn('PDF iframe error on mobile');
+                            setError("");
+                          }}
+                        />
+                      ) : (
+                        /* Desktop: Standard iframe */
+                        <iframe
+                          src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1&page=${currentPage}&zoom=page-fit&view=FitH`}
+                          className="absolute inset-0 w-full h-full border-0 rounded-lg"
+                          title={location.state?.act ? 'Act PDF' : 'Judgment PDF'}
+                          style={{ 
+                            width: '100%', 
+                            height: '100%',
+                            display: 'block',
+                            minHeight: '350px'
+                          }}
+                          allow="fullscreen"
+                          scrolling="auto"
+                          onLoad={() => {
+                            setLoading(false);
+                            setError("");
+                          }}
+                          onError={() => {
+                            console.warn('PDF iframe error, trying alternative display');
+                            setError("");
+                          }}
+                        />
                       )}
                     </div>
 
