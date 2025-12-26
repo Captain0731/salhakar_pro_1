@@ -25,6 +25,12 @@ console.error = (...args) => {
   ) {
     return; // Suppress MetaMask connection errors only
   }
+  
+  // Suppress generic cross-origin "Script error" noise
+  if (message === 'Script error.' || fullMessage.includes('Script error.')) {
+    return;
+  }
+
   originalError.apply(console, args);
 };
 
@@ -34,6 +40,19 @@ window.addEventListener('error', (event) => {
   const errorStack = event.error?.stack || '';
   const errorSource = event.filename || '';
   
+  // Helper: detect cross-origin/extension source
+  const isExtension = errorSource.startsWith('chrome-extension://') || /chrome-extension|extensions/i.test(errorStack);
+  let isCrossOrigin = false;
+  try {
+    if (errorSource) {
+      const srcUrl = new URL(errorSource, window.location.origin);
+      isCrossOrigin = srcUrl.origin !== window.location.origin;
+    }
+  } catch {
+    // If parsing fails, treat as cross-origin
+    isCrossOrigin = true;
+  }
+
   // Suppress MetaMask connection errors
   if (
     errorMessage.includes('Failed to connect to MetaMask') ||
@@ -44,6 +63,13 @@ window.addEventListener('error', (event) => {
   ) {
     event.preventDefault(); // Prevent error from showing in console
     event.stopPropagation(); // Stop error propagation
+    return false;
+  }
+
+  // Suppress generic cross-origin "Script error." from third-party/extension scripts
+  if (errorMessage === 'Script error.' || (isCrossOrigin || isExtension)) {
+    event.preventDefault();
+    event.stopPropagation();
     return false;
   }
 }, true); // Use capture phase to catch errors early
@@ -61,6 +87,12 @@ window.addEventListener('unhandledrejection', (event) => {
     (reasonStack.includes('MetaMask') && reasonStack.includes('connect'))
   ) {
     event.preventDefault(); // Prevent error from showing
+    return false;
+  }
+
+  // Suppress generic cross-origin "Script error" rejections
+  if (reason === 'Script error.' || /Script error\./.test(reasonStack)) {
+    event.preventDefault();
     return false;
   }
 });

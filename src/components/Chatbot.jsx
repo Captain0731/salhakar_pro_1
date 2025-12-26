@@ -7,8 +7,43 @@ const Chatbot = () => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [splineError, setSplineError] = useState(false);
   const chatbotRef = useRef(null);
   const dragStartRef = useRef({ x: 0, y: 0 });
+  
+  // Suppress console errors from Spline component
+  useEffect(() => {
+    const originalError = console.error;
+    console.error = (...args) => {
+      // Filter out Spline-related errors that don't affect functionality
+      const errorMessage = args[0];
+      if (errorMessage && typeof errorMessage === 'string') {
+        if (
+          errorMessage.includes('jsx') || 
+          errorMessage.includes('Missing property') || 
+          errorMessage.includes('non-boolean attribute') ||
+          errorMessage.includes('Received `true` for a non-boolean')
+        ) {
+          // Suppress these specific Spline internal errors
+          return;
+        }
+      }
+      // Check all arguments for error patterns
+      const allArgs = args.join(' ');
+      if (
+        allArgs.includes('jsx') || 
+        allArgs.includes('Missing property') || 
+        allArgs.includes('non-boolean attribute')
+      ) {
+        return;
+      }
+      originalError.apply(console, args);
+    };
+    
+    return () => {
+      console.error = originalError;
+    };
+  }, []);
 
   // Check if mobile on mount and resize
   useEffect(() => {
@@ -104,7 +139,32 @@ const Chatbot = () => {
         WebkitTouchCallout: 'none'
       }}
     >
-      <Spline scene="https://prod.spline.design/lBliC7y81-01lRxX/scene.splinecode" />
+      {splineError ? (
+        <div style={{ 
+          width: '100%', 
+          height: '100%', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          backgroundColor: '#1E65AD',
+          borderRadius: '50%',
+          color: 'white',
+          fontSize: isMobile ? '24px' : '48px',
+          fontWeight: 'bold',
+          cursor: 'pointer'
+        }}>
+          💬
+        </div>
+      ) : (
+        <Spline 
+          scene="https://prod.spline.design/lBliC7y81-01lRxX/scene.splinecode"
+          style={{ width: '100%', height: '100%' }}
+          onError={() => {
+            console.warn('Spline failed to load, using fallback');
+            setSplineError(true);
+          }}
+        />
+      )}
     </div>
   );
 }
