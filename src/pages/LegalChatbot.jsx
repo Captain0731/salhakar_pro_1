@@ -830,8 +830,9 @@ export default function LegalChatbot() {
   const handleDeleteChat = async (sessionId, e) => {
     e.stopPropagation(); // Prevent loading the chat
     try {
-      await apiService.deleteSession(sessionId);
-      console.log('🗑️ Deleted session:', sessionId);
+      // Use deleteChatSession for chat sessions (not deleteSession which is for auth sessions)
+      await apiService.deleteChatSession(sessionId);
+      console.log('🗑️ Deleted chat session:', sessionId);
       
       // If deleted session was current, start new chat
       if (currentSessionId === sessionId) {
@@ -842,7 +843,7 @@ export default function LegalChatbot() {
       loadChatSessions();
       setOpenMenuId(null);
     } catch (error) {
-      console.error('Error deleting session:', error);
+      console.error('Error deleting chat session:', error);
       alert('Failed to delete chat. Please try again.');
     }
   };

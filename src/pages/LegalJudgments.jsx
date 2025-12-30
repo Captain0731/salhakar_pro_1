@@ -418,66 +418,54 @@ export default function LegalJudgments() {
       // Call appropriate API based on court type
       let data;
       if (courtType === "supremecourt") {
-        // Use new Elasticsearch endpoint if there's a search query
-        // Check for non-empty strings (trim to handle whitespace-only strings)
+        // Check for search query - use Elasticsearch endpoint if search exists
         const searchValue = (activeFilters.search || '').trim();
         const titleValue = (activeFilters.title || '').trim();
         const hasSearchQuery = !!(searchValue || titleValue);
         
-        // Debug: Log filter values to understand why ES endpoint might not be called
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🔍 Supreme Court - Checking for search query:', JSON.stringify({
-            hasSearchQuery,
-            searchValue,
-            titleValue,
-            'activeFilters.search': activeFilters.search,
-            'activeFilters.title': activeFilters.title,
-            'activeFilters.search type': typeof activeFilters.search,
-            'activeFilters.search length': activeFilters.search?.length,
-            'activeFilters.title type': typeof activeFilters.title,
-            'activeFilters.title length': activeFilters.title?.length,
-            allActiveFilters: activeFilters
-          }, null, 2));
-        }
+        console.log('🔍 Supreme Court - Search check:', {
+          hasSearchQuery,
+          searchValue,
+          titleValue,
+          'activeFilters.search': activeFilters.search,
+          'activeFilters.title': activeFilters.title,
+          allParams: params
+        });
         
         if (hasSearchQuery) {
-          // Use new Elasticsearch search endpoint (offset-based pagination)
+          // Use Elasticsearch search endpoint (same pattern as High Court)
           const currentOffsetValue = isLoadMore ? currentOffsetRef.current : 0;
           
           const esParams = {
             q: searchValue || titleValue || '',
             size: pageSize,
-            offset: currentOffsetValue  // Add offset for pagination
+            offset: currentOffsetValue
           };
           
-          // Add filters (field-specific filters with boosting)
+          // Add filters
           if (activeFilters.judge) esParams.judge = activeFilters.judge;
           if (activeFilters.petitioner) esParams.petitioner = activeFilters.petitioner;
           if (activeFilters.respondent) esParams.respondent = activeFilters.respondent;
           if (activeFilters.cnr) esParams.cnr = activeFilters.cnr;
           if (activeFilters.decisionDateFrom) {
-            // Extract year from date
             const year = new Date(activeFilters.decisionDateFrom).getFullYear();
             if (year) esParams.year = year;
           }
           
-          // API uses offset-based pagination (not cursor-based)
-          // offset: starting position for results
-          // size: number of results per page (1-20, default 10)
-          
+          console.log('🔍 Calling Supreme Court Elasticsearch with params:', esParams);
           const esResponse = await apiService.searchSupremeCourtJudgements(esParams);
           
-          // Debug: Log full response
-          console.log('🔍 Supreme Court Elasticsearch Response:', {
+          console.log('🔍 Supreme Court ES Response:', {
             success: esResponse?.success,
+            hasResults: !!esResponse?.results,
             resultsCount: esResponse?.results?.length,
-            firstResult: esResponse?.results?.[0],
-            firstResultKeys: esResponse?.results?.[0] ? Object.keys(esResponse.results[0]) : null,
-            fullResponse: esResponse
+            isArray: Array.isArray(esResponse?.results),
+            response: esResponse
           });
           
-          // Transform Elasticsearch response to match expected format
-          if (esResponse && esResponse.success) {
+          // Use results if available (work like High Court - use results if they exist)
+          if (esResponse && esResponse.results && Array.isArray(esResponse.results) && esResponse.results.length > 0) {
+            console.log('✅ Using Elasticsearch results for Supreme Court');
             // Map results and attach highlights to each judgment
             const mappedResults = (esResponse.results || []).map((result, idx) => {
               // Process highlights - check both 'highlight' and 'highlights' keys
@@ -927,7 +915,7 @@ export default function LegalJudgments() {
       if (timer) clearTimeout(timer);
     });
     
-    // Sync all local inputs to filters immediately
+    // Sync all local inputs to filters immediately (CRITICAL for search to work)
     const mergedFilters = { ...filters };
     Object.keys(localInputs).forEach(key => {
       if (localInputs[key] !== undefined) {
@@ -945,6 +933,15 @@ export default function LegalJudgments() {
       }
     });
     
+    // IMPORTANT: Log to verify search value is included
+    console.log('🔍 applyFilters - Merged filters:', {
+      'mergedFilters.search': mergedFilters.search,
+      'localInputs.search': localInputs.search,
+      'filters.search': filters.search,
+      hasSearch: !!(mergedFilters.search && mergedFilters.search.trim()),
+      allMergedFilters: mergedFilters
+    });
+    
     // Update filters state with merged values
     setFilters(mergedFilters);
     
@@ -959,17 +956,6 @@ export default function LegalJudgments() {
     
     // Fetch immediately without delay for smoother experience
     if (fetchJudgmentsRef.current) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔍 Applying filters:', JSON.stringify({
-          mergedFilters,
-          'mergedFilters.search': mergedFilters.search,
-          'mergedFilters.title': mergedFilters.title,
-          'mergedFilters.search type': typeof mergedFilters.search,
-          'mergedFilters.search length': mergedFilters.search?.length,
-          localInputs: localInputs,
-          filters: filters
-        }, null, 2));
-      }
       fetchJudgmentsRef.current(false, mergedFilters);
     }
   };

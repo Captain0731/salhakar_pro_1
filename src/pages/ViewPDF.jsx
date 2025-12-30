@@ -568,15 +568,29 @@ export default function ViewPDF() {
         setMarkdownError("");
         
         try {
-          // Determine if it's a Supreme Court judgment
-          const courtName = judgmentInfo?.court_name || judgmentInfo?.court || '';
-          const isSupremeCourt = courtName && (
-            courtName.toLowerCase().includes('supreme') || 
-            courtName.toLowerCase().includes('sc') ||
-            courtName.toLowerCase() === 'supreme court of india'
-          );
+          // Determine if it's a Supreme Court judgment - Use URL path as primary indicator
+          const pathname = location.pathname.toLowerCase();
+          const isSupremeCourtUrl = pathname.includes('/supreme-court/');
+          const isHighCourtUrl = pathname.includes('/high-court/');
+          
+          // Fallback to court name detection if URL doesn't indicate court type
+          let isSupremeCourt = isSupremeCourtUrl;
+          if (!isSupremeCourtUrl && !isHighCourtUrl) {
+            const courtName = judgmentInfo?.court_name || judgmentInfo?.court || '';
+            isSupremeCourt = courtName && (
+              courtName.toLowerCase().includes('supreme') || 
+              courtName.toLowerCase().includes('sc') ||
+              courtName.toLowerCase() === 'supreme court of india'
+            );
+          }
         
-          console.log(`📄 Fetching markdown for judgment ${judgmentId} (${isSupremeCourt ? 'Supreme Court' : 'High Court'})`);
+          console.log(`📄 Fetching markdown for judgment ${judgmentId}`, {
+            isSupremeCourt,
+            pathname,
+            isSupremeCourtUrl,
+            isHighCourtUrl,
+            courtName: judgmentInfo?.court_name || judgmentInfo?.court
+          });
             
           // Use appropriate endpoint based on court type
           let markdown;
@@ -1097,13 +1111,29 @@ export default function ViewPDF() {
                                       // Fetch markdown content from backend
                                       let markdownContent = '';
                                       try {
-                                        // Determine if it's a Supreme Court judgment
-                                        const courtName = judgmentInfo?.court_name || judgmentInfo?.court || '';
-                                        const isSupremeCourt = courtName && (
-                                          courtName.toLowerCase().includes('supreme') || 
-                                          courtName.toLowerCase().includes('sc') ||
-                                          courtName.toLowerCase() === 'supreme court of india'
-                                        );
+                                        // Determine if it's a Supreme Court judgment - Use URL path as primary indicator
+                                        const pathname = location.pathname.toLowerCase();
+                                        const isSupremeCourtUrl = pathname.includes('/supreme-court/');
+                                        const isHighCourtUrl = pathname.includes('/high-court/');
+                                        
+                                        // Fallback to court name detection if URL doesn't indicate court type
+                                        let isSupremeCourt = isSupremeCourtUrl;
+                                        if (!isSupremeCourtUrl && !isHighCourtUrl) {
+                                          const courtName = judgmentInfo?.court_name || judgmentInfo?.court || '';
+                                          isSupremeCourt = courtName && (
+                                            courtName.toLowerCase().includes('supreme') || 
+                                            courtName.toLowerCase().includes('sc') ||
+                                            courtName.toLowerCase() === 'supreme court of india'
+                                          );
+                                        }
+                                        
+                                        console.log(`📄 Download: Fetching markdown for judgment ${judgmentId}`, {
+                                          isSupremeCourt,
+                                          pathname,
+                                          isSupremeCourtUrl,
+                                          isHighCourtUrl,
+                                          courtName: judgmentInfo?.court_name || judgmentInfo?.court
+                                        });
                                         
                                         // Use appropriate endpoint based on court type
                                         if (isSupremeCourt) {
@@ -3177,6 +3207,25 @@ export default function ViewPDF() {
         }}
         item={judgmentInfo}
         itemType="judgment"
+        courtType={(() => {
+          // Determine court type from URL path (most reliable)
+          const pathname = location.pathname.toLowerCase();
+          if (pathname.includes('/supreme-court/')) {
+            return 'supremecourt';
+          } else if (pathname.includes('/high-court/')) {
+            return 'highcourt';
+          }
+          // Fallback to court name detection
+          const courtName = judgmentInfo?.court_name || judgmentInfo?.court || '';
+          if (courtName && (
+            courtName.toLowerCase().includes('supreme') || 
+            courtName.toLowerCase().includes('sc') ||
+            courtName.toLowerCase() === 'supreme court of india'
+          )) {
+            return 'supremecourt';
+          }
+          return 'highcourt';
+        })()}
       />
     </div>
   );

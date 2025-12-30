@@ -57,12 +57,26 @@ const SummaryPopup = ({ isOpen, onClose, item, itemType, courtType }) => {
             if (!summaryText) {
               try {
                 // Determine if it's a Supreme Court judgment
-                const courtName = item?.court_name || item?.court || '';
-                const isSupremeCourt = courtName && (
-                  courtName.toLowerCase().includes('supreme') || 
-                  courtName.toLowerCase().includes('sc') ||
-                  courtName.toLowerCase() === 'supreme court of india'
-                );
+                // First check courtType prop (most reliable)
+                let isSupremeCourt = false;
+                if (courtType === 'supremecourt' || courtType === 'supreme-court' || courtType === 'supreme_court') {
+                  isSupremeCourt = true;
+                } else {
+                  // Fallback to court name detection
+                  const courtName = item?.court_name || item?.court || '';
+                  isSupremeCourt = courtName && (
+                    courtName.toLowerCase().includes('supreme') || 
+                    courtName.toLowerCase().includes('sc') ||
+                    courtName.toLowerCase() === 'supreme court of india'
+                  );
+                }
+                
+                console.log('📄 SummaryPopup: Fetching markdown for judgment', {
+                  itemId: item.id,
+                  isSupremeCourt,
+                  courtType,
+                  courtName: item?.court_name || item?.court
+                });
                 
                 // Use appropriate endpoint based on court type
                 let markdown;

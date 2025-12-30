@@ -1064,54 +1064,178 @@ class ApiService {
   async searchSupremeCourtJudgements(params = {}) {
     const { q, size = 10, offset = 0, judge, petitioner, respondent, cnr, year } = params;
 
+    // Validate required parameters
+    if (!q || (typeof q === 'string' && q.trim().length === 0)) {
+      console.warn('⚠️ Empty search query provided to searchSupremeCourtJudgements');
+      // Return empty result structure instead of making API call
+      return {
+        success: false,
+        query: q || '',
+        total_results: 0,
+        returned_results: 0,
+        results: [],
+        pagination_info: {
+          offset: offset,
+          next_offset: null,
+          has_more: false,
+          current_page_size: 0
+        },
+        search_engine: 'elasticsearch'
+      };
+    }
+
     const queryParams = new URLSearchParams();
 
-    // Full-text search query (optional - if omitted, returns all judgments)
-    if (q) queryParams.append('q', q);
+    // Full-text search query (required for search endpoint)
+    queryParams.append('q', q.trim());
 
     // Pagination parameters (required for offset-based pagination)
-    queryParams.append('size', size.toString());
-    queryParams.append('offset', offset.toString());
+    // Validate size (should be between 1 and 20)
+    const validatedSize = Math.max(1, Math.min(20, parseInt(size) || 10));
+    queryParams.append('size', validatedSize.toString());
+    
+    // Validate offset (should be non-negative)
+    const validatedOffset = Math.max(0, parseInt(offset) || 0);
+    queryParams.append('offset', validatedOffset.toString());
 
-    // Field-specific filters with boosting
-    if (judge) queryParams.append('judge', judge);
-    if (petitioner) queryParams.append('petitioner', petitioner);
-    if (respondent) queryParams.append('respondent', respondent);
-    if (cnr) queryParams.append('cnr', cnr);
-    if (year) queryParams.append('year', year.toString());
+    // Field-specific filters with boosting (only add if not empty)
+    if (judge && judge.trim()) queryParams.append('judge', judge.trim());
+    if (petitioner && petitioner.trim()) queryParams.append('petitioner', petitioner.trim());
+    if (respondent && respondent.trim()) queryParams.append('respondent', respondent.trim());
+    if (cnr && cnr.trim()) queryParams.append('cnr', cnr.trim());
+    if (year && !isNaN(parseInt(year))) queryParams.append('year', parseInt(year).toString());
 
     const url = `${this.baseURL}/api/supreme-court-judgements/search?${queryParams.toString()}`;
-    console.log('🔍 Supreme Court ES Search URL:', url);
-    console.log('🔍 Supreme Court ES Search Params:', params);
+    
+    // Reduced logging for production
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Supreme Court ES Search URL:', url);
+      console.log('🔍 Supreme Court ES Search Params:', params);
+    }
 
     // Try with auth first, then without if 401 (for public access)
     let response;
     let headers = this.getAuthHeaders();
 
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
     try {
       response = await fetch(url, {
         method: 'GET',
-        headers: headers
+        headers: headers,
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       // If 401, try without auth (public endpoint)
       if (response.status === 401) {
-        console.log('⚠️ Got 401, trying without authentication...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('⚠️ Got 401, trying without authentication...');
+        }
         headers = this.getPublicHeaders();
+        // Create new abort controller for retry
+        const retryController = new AbortController();
+        const retryTimeoutId = setTimeout(() => retryController.abort(), 30000);
         response = await fetch(url, {
           method: 'GET',
-          headers: headers
+          headers: headers,
+          signal: retryController.signal
         });
+        clearTimeout(retryTimeoutId);
       }
+
+      // Check for rate limiting
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        throw new Error(`Rate limit exceeded. Please wait ${retryAfter || 'a moment'} before trying again.`);
+      }
+
     } catch (fetchError) {
-      console.error('❌ Network error fetching Supreme Court search:', fetchError);
-      throw new Error('Failed to fetch: Network error. Please check your connection and try again.');
+      // Handle timeout errors
+      if (fetchError.name === 'TimeoutError' || fetchError.name === 'AbortError') {
+        console.error('❌ Request timeout for Supreme Court search:', fetchError);
+        throw new Error('Request timed out. The server may be busy. Please try again.');
+      }
+      
+      // Handle network errors
+      if (fetchError.message && !fetchError.message.includes('Rate limit')) {
+        console.error('❌ Network error fetching Supreme Court search:', fetchError);
+        throw new Error('Network error. Please check your internet connection and try again.');
+      }
+      
+      throw fetchError;
     }
 
-    const data = await this.handleResponse(response);
+    let data;
+    try {
+      data = await this.handleResponse(response);
+    } catch (error) {
+      console.error('❌ Error parsing Supreme Court search response:', error);
+      throw new Error(`Failed to parse search response: ${error.message}`);
+    }
 
-    // Debug: Log raw response
-    console.log('🔍 Supreme Court ES Raw Response:', {
+    // Validate response structure
+    if (!data || typeof data !== 'object') {
+      console.error('❌ Invalid response structure from Supreme Court search:', {
+        data,
+        dataType: typeof data,
+        isNull: data === null,
+        isUndefined: data === undefined
+      });
+      throw new Error('Invalid response from server. Please try again.');
+    }
+
+    // Log the full response structure for debugging
+    console.log('🔍 Supreme Court ES Raw Response Structure:', {
+      hasData: !!data,
+      dataKeys: data ? Object.keys(data) : [],
+      hasResults: 'results' in data,
+      resultsType: typeof data.results,
+      resultsIsArray: Array.isArray(data.results),
+      hasDataField: 'data' in data,
+      dataDataType: typeof data.data,
+      dataDataIsArray: Array.isArray(data.data),
+      fullResponse: data
+    });
+
+    // Handle different response structures
+    // Some APIs might return results in 'data' field instead of 'results'
+    if (!data.results && data.data && Array.isArray(data.data)) {
+      console.log('⚠️ Results found in data.data field, mapping to results');
+      data.results = data.data;
+    }
+
+    // Ensure results is an array
+    if (!Array.isArray(data.results)) {
+      console.warn('⚠️ Results is not an array, converting:', {
+        results: data.results,
+        resultsType: typeof data.results,
+        dataKeys: Object.keys(data),
+        fullData: data
+      });
+      
+      // Try to extract results from different possible locations
+      if (data.data && Array.isArray(data.data)) {
+        data.results = data.data;
+      } else if (Array.isArray(data)) {
+        // If the response itself is an array
+        data = { results: data, success: true };
+      } else {
+        // Default to empty array
+        data.results = [];
+      }
+    }
+
+    // Ensure success flag exists
+    if (data.results && data.results.length > 0 && !data.hasOwnProperty('success')) {
+      data.success = true;
+    }
+
+    // Debug: Log final response structure
+    console.log('🔍 Supreme Court ES Final Response:', {
       success: data?.success,
       query: data?.query,
       total_results: data?.total_results,
@@ -1120,7 +1244,7 @@ class ApiService {
       pagination_info: data?.pagination_info,
       firstResultStructure: data?.results?.[0] ? Object.keys(data.results[0]) : null,
       firstResultHighlight: data?.results?.[0]?.highlight,
-      fullResponse: data
+      responseKeys: Object.keys(data)
     });
 
     return data;
@@ -2603,7 +2727,8 @@ class ApiService {
   async getSupremeCourtJudgementByIdMarkdown(judgementId) {
     const token = localStorage.getItem('access_token') || localStorage.getItem('accessToken') || localStorage.getItem('token');
     const headers = {
-      'Accept': 'text/markdown',
+      'Accept': 'text/markdown, text/plain, */*',
+      'Content-Type': 'text/markdown',
       'ngrok-skip-browser-warning': 'true',
       ...(token && { 'Authorization': `Bearer ${token}` })
     };
@@ -2630,8 +2755,22 @@ class ApiService {
         throw new Error(`Failed to fetch Supreme Court judgment Markdown: ${response.status} ${response.statusText}`);
       }
 
+      // Get content type to ensure we're receiving markdown
+      const contentType = response.headers.get('content-type') || '';
       const markdown = await response.text();
-      console.log(`✅ Markdown fetched successfully (${markdown.length} chars)`);
+      
+      // Validate markdown content
+      if (!markdown || markdown.trim().length === 0) {
+        throw new Error('Received empty markdown content from server');
+      }
+
+      // Check if response is actually HTML instead of markdown (common API issue)
+      if (markdown.trim().startsWith('<!DOCTYPE') || markdown.trim().startsWith('<html')) {
+        console.warn('⚠️ Received HTML instead of markdown, API may not support markdown format for this judgment');
+        throw new Error('API returned HTML instead of markdown format. Please try JSON format instead.');
+      }
+
+      console.log(`✅ Markdown fetched successfully (${markdown.length} chars, content-type: ${contentType})`);
       return markdown;
     } catch (error) {
       console.error(`❌ Error in getSupremeCourtJudgementByIdMarkdown:`, {
